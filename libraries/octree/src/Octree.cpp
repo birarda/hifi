@@ -1926,7 +1926,7 @@ bool Octree::readSVOFromStream(unsigned long streamLength, QDataStream& inputStr
     
     bool wantImportProgress = true;
 
-    PacketType expectedType = expectedDataPacketType();
+    PacketType::Value expectedType = expectedDataPacketType();
     PacketVersion expectedVersion = versionForPacketType(expectedType);
     bool hasBufferBreaks = versionHasSVOfileBreaks(expectedVersion);
 
@@ -1944,7 +1944,7 @@ bool Octree::readSVOFromStream(unsigned long streamLength, QDataStream& inputStr
         unsigned long  dataLength = HEADER_LENGTH;
 
         // if so, read the first byte of the file and see if it matches the expected version code
-        PacketType gotType;
+        PacketType::Value gotType;
         memcpy(&gotType, dataAt, sizeof(gotType));
 
         dataAt += sizeof(expectedType);
@@ -2087,7 +2087,7 @@ void Octree::writeToJSONFile(const char* fileName, OctreeElement* element) {
     }
 
     // include the "bitstream" version
-    PacketType expectedType = expectedDataPacketType();
+    PacketType::Value expectedType = expectedDataPacketType();
     PacketVersion expectedVersion = versionForPacketType(expectedType);
     entityDescription["Version"] = (int) expectedVersion;
 
@@ -2108,7 +2108,7 @@ void Octree::writeToSVOFile(const char* fileName, OctreeElement* element) {
     if(file.is_open()) {
         qCDebug(octree, "Saving binary SVO to file %s...", fileName);
 
-        PacketType expectedType = expectedDataPacketType();
+        PacketType::Value expectedType = expectedDataPacketType();
         PacketVersion expectedVersion = versionForPacketType(expectedType);
         bool hasBufferBreaks = versionHasSVOfileBreaks(expectedVersion);
 

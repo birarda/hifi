@@ -173,38 +173,38 @@ void NodeList::timePingReply(const QByteArray& packet, const SharedNodePointer& 
 }
 
 void NodeList::processNodeData(const HifiSockAddr& senderSockAddr, const QByteArray& packet) {
-    PacketType packetType = packetTypeForPacket(packet);
+    PacketType::Value packetType = packetTypeForPacket(packet);
     switch (packetType) {
-        case PacketTypeDomainList:
-        case PacketTypeDomainServerAddedNode: {
+        case PacketType::DomainList:
+        case PacketType::DomainServerAddedNode: {
             if (!_domainHandler.getSockAddr().isNull()) {
                 // only process a packet from domain-server if we're talking to a domain
                 // TODO: how do we make sure this is actually the domain we want the list from (DTLS probably)
-                if (packetType == PacketTypeDomainList) {
+                if (packetType == PacketType::DomainList) {
                     processDomainServerList(packet);
-                } else if (packetType == PacketTypeDomainServerAddedNode) {
+                } else if (packetType == PacketType::DomainServerAddedNode) {
                     processDomainServerAddedNode(packet);
                 }
             }
             break;
         }
-        case PacketTypeDomainServerRequireDTLS: {
+        case PacketType::DomainServerRequireDTLS: {
             _domainHandler.parseDTLSRequirementPacket(packet);
             break;
         }
-        case PacketTypeIceServerPeerInformation: {
+        case PacketType::IceServerPeerInformation: {
             if (!_domainHandler.getICEPeer().hasSockets()) {
                 _domainHandler.processICEResponsePacket(packet);
             }
             break;
         }
-        case PacketTypePing: {
+        case PacketType::Ping: {
             // send back a reply
             SharedNodePointer matchingNode = sendingNodeForPacket(packet);
             if (matchingNode) {
                 matchingNode->setLastHeardMicrostamp(usecTimestampNow());
-                QByteArray replyPacket = constructPingReplyPacket(packet);
-                writeDatagram(replyPacket, matchingNode, senderSockAddr);
+                auto replyPacket = constructPingReplyPacket(packet);
+                sendPacket(replyPacket, matchingNode, senderSockAddr);
 
                 // If we don't have a symmetric socket for this node and this socket doesn't match
                 // what we have for public and local then set it as the symmetric.
@@ -218,7 +218,7 @@ void NodeList::processNodeData(const HifiSockAddr& senderSockAddr, const QByteAr
 
             break;
         }
-        case PacketTypePingReply: {
+        case PacketType::PingReply: {
             SharedNodePointer sendingNode = sendingNodeForPacket(packet);
 
             if (sendingNode) {
@@ -233,13 +233,13 @@ void NodeList::processNodeData(const HifiSockAddr& senderSockAddr, const QByteAr
 
             break;
         }
-        case PacketTypeUnverifiedPing: {
+        case PacketType::ICEPing: {
             // send back a reply
-            QByteArray replyPacket = constructPingReplyPacket(packet, _domainHandler.getICEClientID());
-            writeUnverifiedDatagram(replyPacket, senderSockAddr);
+            auto replyPacket = constructICEPingReplyPacket(packet, _domainHandler.getICEClientID());
+            sendPacket(replyPacket, senderSockAddr);
             break;
         }
-        case PacketTypeUnverifiedPingReply: {
+        case PacketType::ICEPingReply: {
             qCDebug(networking) << "Received reply from domain-server on" << senderSockAddr;
 
             if (_domainHandler.getIP().isNull()) {
@@ -256,13 +256,13 @@ void NodeList::processNodeData(const HifiSockAddr& senderSockAddr, const QByteAr
 
             }
         }
-        case PacketTypeStunResponse: {
+        case PacketType::StunResponse: {
             // a STUN packet begins with 00, we've checked the second zero with packetVersionMatch
             // pass it along so it can be processed into our public address and port
             processSTUNResponse(packet);
             break;
         }
-        case PacketTypeDomainServerPathResponse: {
+        case PacketType::DomainServerPathResponse: {
             handleDSPathQueryResponse(packet);
             break;
         }
@@ -309,8 +309,8 @@ void NodeList::sendDomainServerCheckIn() {
     } else if (!_domainHandler.getIP().isNull()) {
         bool isUsingDTLS = false;
 
-        PacketType domainPacketType = !_domainHandler.isConnected()
-            ? PacketTypeDomainConnectRequest : PacketTypeDomainListRequest;
+        PacketType::Value domainPacketType = !_domainHandler.isConnected()
+            ? PacketType::DomainConnectRequest : PacketType::DomainListRequest;
 
         if (!_domainHandler.isConnected()) {
             qCDebug(networking) << "Sending connect request to domain-server at" << _domainHandler.getHostname();
@@ -329,24 +329,26 @@ void NodeList::sendDomainServerCheckIn() {
 
         }
 
-        // construct the DS check in packet
-        QUuid packetUUID = _sessionUUID;
+        auto domainPacket { NLPacket::create(domainPacketType); }
+        QDataStream packetStream(&domainPacket->getPayload);
 
-        if (domainPacketType == PacketTypeDomainConnectRequest) {
+        if (domainPacketType == PacketType::DomainConnectRequest) {
+            QUuid connectUUID;
+
             if (!_domainHandler.getAssignmentUUID().isNull()) {
                 // this is a connect request and we're an assigned node
                 // so set our packetUUID as the assignment UUID
-                packetUUID = _domainHandler.getAssignmentUUID();
+                connectUUID = _domainHandler.getAssignmentUUID();
             } else if (_domainHandler.requiresICE()) {
                 // this is a connect request and we're an interface client
                 // that used ice to discover the DS
                 // so send our ICE client UUID with the connect request
-                packetUUID = _domainHandler.getICEClientID();
+                connectUUID = _domainHandler.getICEClientID();
             }
-        }
 
-        QByteArray domainServerPacket = byteArrayWithUUIDPopulatedHeader(domainPacketType, packetUUID);
-        QDataStream packetStream(&domainServerPacket, QIODevice::Append);
+            // pack the connect UUID for this connect request
+            packetStream << connectUUID;
+        }
 
         // pack our data to send to the domain-server
         packetStream << _ownerType << _publicSockAddr << _localSockAddr << _nodeTypesOfInterest.toList();
@@ -367,7 +369,7 @@ void NodeList::sendDomainServerCheckIn() {
         flagTimeForConnectionStep(LimitedNodeList::ConnectionStep::SendDSCheckIn);
 
         if (!isUsingDTLS) {
-            writeUnverifiedDatagram(domainServerPacket, _domainHandler.getSockAddr());
+            sendPacket(domainPacket, _domainHandler.getSockAddr());
         }
 
         if (_numNoReplyDomainCheckIns >= MAX_SILENT_DOMAIN_SERVER_CHECK_INS) {
@@ -410,7 +412,7 @@ void NodeList::sendDSPathQuery(const QString& newPath) {
     // only send a path query if we know who our DS is or is going to be
     if (_domainHandler.isSocketKnown()) {
         // construct the path query packet
-        QByteArray pathQueryPacket = byteArrayWithPopulatedHeader(PacketTypeDomainServerPathQuery);
+        auto pathQueryPacket = NLPacket::create(PacketType::DomainServerPathQuery);
 
         // get the UTF8 representation of path query
         QByteArray pathQueryUTF8 = newPath.toUtf8();
@@ -418,18 +420,18 @@ void NodeList::sendDSPathQuery(const QString& newPath) {
         // get the size of the UTF8 representation of the desired path
         quint16 numPathBytes = pathQueryUTF8.size();
 
-        if (pathQueryPacket.size() + numPathBytes + sizeof(numPathBytes) < MAX_PACKET_SIZE) {
+        if (numPathBytes + sizeof(numPathBytes) < pathQueryPacket.size() ) {
             // append the size of the path to the query packet
-            pathQueryPacket.append(reinterpret_cast<char*>(&numPathBytes), sizeof(numPathBytes));
+            pathQueryPacket.write(&numPathBytes, sizeof(numPathBytes));
 
             // append the path itself to the query packet
-            pathQueryPacket.append(pathQueryUTF8);
+            pathQueryPacket.write(pathQueryUTF8);
 
             qCDebug(networking) << "Sending a path query packet for path" << newPath << "to domain-server at"
                 << _domainHandler.getSockAddr();
 
             // send off the path query
-            writeUnverifiedDatagram(pathQueryPacket, _domainHandler.getSockAddr());
+            sendPacket(pathQueryPacket, _domainHandler.getSockAddr());
         } else {
             qCDebug(networking) << "Path" << newPath << "would make PacketTypeDomainServerPathQuery packet > MAX_PACKET_SIZE." <<
                 "Will not send query.";
@@ -518,11 +520,11 @@ void NodeList::pingPunchForDomainServer() {
         flagTimeForConnectionStep(LimitedNodeList::ConnectionStep::SendPingsToDS);
 
         // send the ping packet to the local and public sockets for this node
-        QByteArray localPingPacket = constructPingPacket(PingType::Local, false, _domainHandler.getICEClientID());
-        writeUnverifiedDatagram(localPingPacket, _domainHandler.getICEPeer().getLocalSocket());
+        auto localPingPacket = constructICEPingPacket(PingType::Local);
+        sendPacket(localPingPacket, _domainHandler.getICEPeer().getLocalSocket());
 
-        QByteArray publicPingPacket = constructPingPacket(PingType::Public, false, _domainHandler.getICEClientID());
-        writeUnverifiedDatagram(publicPingPacket, _domainHandler.getICEPeer().getPublicSocket());
+        auto publicPingPacket = constructICEPingPacket(PingType::Public);
+        sendPacket(publicPingPacket, _domainHandler.getICEPeer().getPublicSocket());
 
         _domainHandler.getICEPeer().incrementConnectionAttempts();
     }
@@ -550,6 +552,7 @@ int NodeList::processDomainServerList(const QByteArray& packet) {
     packetStream >> newUUID;
     setSessionUUID(newUUID);
 
+    // TODO: when fixing this read these are actually chars now, not bools
     bool thisNodeCanAdjustLocks;
     packetStream >> thisNodeCanAdjustLocks;
     setThisNodeCanAdjustLocks(thisNodeCanAdjustLocks);
@@ -600,7 +603,7 @@ void NodeList::parseNodeFromPacketStream(QDataStream& packetStream) {
 
 void NodeList::sendAssignment(Assignment& assignment) {
 
-    PacketType assignmentPacketType = assignment.getCommand() == Assignment::CreateCommand
+    PacketType::Value assignmentPacketType = assignment.getCommand() == Assignment::CreateCommand
         ? PacketTypeCreateAssignment
         : PacketTypeRequestAssignment;
 
@@ -625,15 +628,15 @@ void NodeList::pingPunchForInactiveNode(const SharedNodePointer& node) {
     }
 
     // send the ping packet to the local and public sockets for this node
-    QByteArray localPingPacket = constructPingPacket(PingType::Local);
-    writeDatagram(localPingPacket, node, node->getLocalSocket());
+    auto localPingPacket = constructPingPacket(PingType::Local);
+    sendPacket(localPingPacket, node, node->getLocalSocket());
 
-    QByteArray publicPingPacket = constructPingPacket(PingType::Public);
-    writeDatagram(publicPingPacket, node, node->getPublicSocket());
+    auto publicPingPacket = constructPingPacket(PingType::Public);
+    sendPacket(publicPingPacket, node, node->getPublicSocket());
 
     if (!node->getSymmetricSocket().isNull()) {
-        QByteArray symmetricPingPacket = constructPingPacket(PingType::Symmetric);
-        writeDatagram(symmetricPingPacket, node, node->getSymmetricSocket());
+        auto symmetricPingPacket = constructPingPacket(PingType::Symmetric);
+        sendPacket(symmetricPingPacket, node, node->getSymmetricSocket());
     }
 
     node->incrementConnectionAttempts();
