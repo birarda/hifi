@@ -40,8 +40,7 @@ GLBackend::GLFramebuffer* GLBackend::syncGPUObject(const Framebuffer& framebuffe
 
         glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 
-        unsigned int nbColorBuffers = 0;
-        GLenum colorBuffers[16];
+        std::vector<GLenum> colorBuffers;
         if (framebuffer.hasColor()) {
             static const GLenum colorAttachments[] = {
                 GL_COLOR_ATTACHMENT0,
@@ -69,8 +68,7 @@ GLBackend::GLFramebuffer* GLBackend::syncGPUObject(const Framebuffer& framebuffe
                     if (gltexture) {
                         glFramebufferTexture2D(GL_FRAMEBUFFER, colorAttachments[unit], GL_TEXTURE_2D, gltexture->_texture, 0);
                     }
-                    colorBuffers[nbColorBuffers] = colorAttachments[unit];
-                    nbColorBuffers++;
+                    colorBuffers.push_back(colorAttachments[unit]);
                     unit++;
                 }
             }
@@ -100,8 +98,8 @@ GLBackend::GLFramebuffer* GLBackend::syncGPUObject(const Framebuffer& framebuffe
         }
 
         // Last but not least, define where we draw
-        if (nbColorBuffers > 0) {
-            glDrawBuffers(nbColorBuffers, colorBuffers);
+        if (!colorBuffers.empty()) {
+            glDrawBuffers(colorBuffers.size(), colorBuffers.data());
         } else {
             glDrawBuffer( GL_NONE );
         }
@@ -139,6 +137,7 @@ GLBackend::GLFramebuffer* GLBackend::syncGPUObject(const Framebuffer& framebuffe
         // All is green, assign the gpuobject to the Framebuffer
         object = new GLFramebuffer();
         object->_fbo = fbo;
+        object->_colorBuffers = colorBuffers;
         Backend::setGPUObject(framebuffer, object);
     }
 
@@ -168,3 +167,21 @@ void GLBackend::do_setFramebuffer(Batch& batch, uint32 paramOffset) {
     }
 }
 
+void GLBackend::do_blit(Batch& batch, uint32 paramOffset) {
+    auto srcframebuffer = batch._framebuffers.get(batch._params[paramOffset]._uint);
+    Vec4i srcvp;
+    for (size_t i = 0; i < 4; ++i) {
+        srcvp[i] = batch._params[paramOffset + 1 + i]._int;
+    }
+
+    auto dstframebuffer = batch._framebuffers.get(batch._params[paramOffset + 5]._uint);
+    Vec4i dstvp;
+    for (size_t i = 0; i < 4; ++i) {
+        dstvp[i] = batch._params[paramOffset + 6 + i]._int;
+    }
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, getFramebufferID(dstframebuffer));
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, getFramebufferID(srcframebuffer));
+    glBlitFramebuffer(srcvp.x, srcvp.y, srcvp.z, srcvp.w, 
+        dstvp.x, dstvp.y, dstvp.z, dstvp.w,
+        GL_COLOR_BUFFER_BIT, GL_LINEAR);
+}

@@ -11,6 +11,7 @@
 #include "Scene.h"
 
 #include <numeric>
+#include "gpu/Batch.h"
 
 using namespace render;
 
@@ -75,7 +76,7 @@ void Item::Status::Value::setColor(float hue) {
 }
 
 void Item::Status::getPackedValues(glm::ivec4& values) const {
-    for (unsigned int i = 0; i < values.length(); i++) {
+    for (unsigned int i = 0; i < (unsigned int)values.length(); i++) {
         if (i < _values.size()) {
             values[i] = _values[i]().getPackedData();
         } else {
@@ -86,14 +87,14 @@ void Item::Status::getPackedValues(glm::ivec4& values) const {
 
 void Item::PayloadInterface::addStatusGetter(const Status::Getter& getter) {
     if (!_status) {
-        _status.reset(new Status());
+        _status = std::make_shared<Status>();
     }
     _status->addGetter(getter);
 }
 
 void Item::PayloadInterface::addStatusGetters(const Status::Getters& getters) {
     if (!_status) {
-        _status.reset(new Status());
+        _status = std::make_shared<Status>();
     }
     for (auto& g : getters) {
         _status->addGetter(g);
@@ -167,6 +168,7 @@ void consolidateChangeQueue(PendingChangesQueue& queue, PendingChanges& singleBa
 }
  
 void Scene::processPendingChangesQueue() {
+    PROFILE_RANGE(__FUNCTION__);
     _changeQueueMutex.lock();
     PendingChanges consolidatedPendingChanges;
     consolidateChangeQueue(_changeQueue, consolidatedPendingChanges);

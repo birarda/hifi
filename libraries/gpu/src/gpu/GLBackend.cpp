@@ -33,12 +33,17 @@ GLBackend::CommandCall GLBackend::_commandCalls[Batch::NUM_COMMANDS] =
 
     (&::gpu::GLBackend::do_setPipeline),
     (&::gpu::GLBackend::do_setStateBlendFactor),
+    (&::gpu::GLBackend::do_setStateScissorRect),
 
     (&::gpu::GLBackend::do_setUniformBuffer),
-    (&::gpu::GLBackend::do_setUniformTexture),
+    (&::gpu::GLBackend::do_setResourceTexture),
 
     (&::gpu::GLBackend::do_setFramebuffer),
+    (&::gpu::GLBackend::do_blit),
 
+    (&::gpu::GLBackend::do_beginQuery),
+    (&::gpu::GLBackend::do_endQuery),
+    (&::gpu::GLBackend::do_getQuery),
 
     (&::gpu::GLBackend::do_glEnable),
     (&::gpu::GLBackend::do_glDisable),
@@ -84,10 +89,12 @@ GLBackend::GLBackend() :
     _pipeline(),
     _output()
 {
+    initInput();
     initTransform();
 }
 
 GLBackend::~GLBackend() {
+    killInput();
     killTransform();
 }
 
@@ -201,7 +208,6 @@ void GLBackend::do_drawInstanced(Batch& batch, uint32 paramOffset) {
     GLenum mode = _primitiveToGLmode[primitiveType];
     uint32 numVertices = batch._params[paramOffset + 2]._uint;
     uint32 startVertex = batch._params[paramOffset + 1]._uint;
-    uint32 startInstance = batch._params[paramOffset + 0]._uint;
 
     glDrawArraysInstancedARB(mode, startVertex, numVertices, numInstances);
     (void) CHECK_GL_ERROR();
@@ -213,17 +219,18 @@ void GLBackend::do_drawIndexedInstanced(Batch& batch, uint32 paramOffset) {
 
 void GLBackend::do_clearFramebuffer(Batch& batch, uint32 paramOffset) {
 
-    uint32 masks = batch._params[paramOffset + 6]._uint;
+    uint32 masks = batch._params[paramOffset + 7]._uint;
     Vec4 color;
-    color.x = batch._params[paramOffset + 5]._float;
-    color.y = batch._params[paramOffset + 4]._float;
-    color.z = batch._params[paramOffset + 3]._float;
-    color.w = batch._params[paramOffset + 2]._float;
-    float depth = batch._params[paramOffset + 1]._float;
-    int stencil = batch._params[paramOffset + 0]._float;
+    color.x = batch._params[paramOffset + 6]._float;
+    color.y = batch._params[paramOffset + 5]._float;
+    color.z = batch._params[paramOffset + 4]._float;
+    color.w = batch._params[paramOffset + 3]._float;
+    float depth = batch._params[paramOffset + 2]._float;
+    int stencil = batch._params[paramOffset + 1]._int;
+    int useScissor = batch._params[paramOffset + 0]._int;
 
     GLuint glmask = 0;
-    if (masks & Framebuffer::BUFFER_DEPTH) {
+    if (masks & Framebuffer::BUFFER_STENCIL) {
         glClearStencil(stencil);
         glmask |= GL_STENCIL_BUFFER_BIT;
     }
@@ -233,16 +240,44 @@ void GLBackend::do_clearFramebuffer(Batch& batch, uint32 paramOffset) {
         glmask |= GL_DEPTH_BUFFER_BIT;
     } 
 
+    std::vector<GLenum> drawBuffers;
     if (masks & Framebuffer::BUFFER_COLORS) {
-        glClearColor(color.x, color.y, color.z, color.w);
-        glmask |= GL_COLOR_BUFFER_BIT;
+        for (unsigned int i = 0; i < Framebuffer::MAX_NUM_RENDER_BUFFERS; i++) {
+            if (masks & (1 << i)) {
+                drawBuffers.push_back(GL_COLOR_ATTACHMENT0 + i);
+            }
+        }
+
+        if (!drawBuffers.empty()) {
+            glDrawBuffers(drawBuffers.size(), drawBuffers.data());
+            glClearColor(color.x, color.y, color.z, color.w);
+            glmask |= GL_COLOR_BUFFER_BIT;
+        }
+    }
+
+    // Apply scissor if needed and if not already on
+    bool doEnableScissor = (useScissor && (!_pipeline._stateCache.scissorEnable));
+    if (doEnableScissor) {
+        glEnable(GL_SCISSOR_TEST);
     }
 
     glClear(glmask);
 
+    // Restore scissor if needed
+    if (doEnableScissor) {
+        glDisable(GL_SCISSOR_TEST);
+    }
+
+    // Restore the color draw buffers only if a frmaebuffer is bound
+    if (_output._framebuffer && !drawBuffers.empty()) {
+        auto glFramebuffer = syncGPUObject(*_output._framebuffer);
+        if (glFramebuffer) {
+            glDrawBuffers(glFramebuffer->_colorBuffers.size(), glFramebuffer->_colorBuffers.data());
+        }
+    }
+
     (void) CHECK_GL_ERROR();
 }
-
 
 // TODO: As long as we have gl calls explicitely issued from interface
 // code, we need to be able to record and batch these calls. THe long 
@@ -598,10 +633,11 @@ void GLBackend::do_glUniform4fv(Batch& batch, uint32 paramOffset) {
         return;
     }
     updatePipeline();
-    glUniform4fv(
-        batch._params[paramOffset + 2]._int,
-        batch._params[paramOffset + 1]._uint,
-        (const GLfloat*)batch.editData(batch._params[paramOffset + 0]._uint));
+    
+    GLint location = batch._params[paramOffset + 2]._int;
+    GLsizei count = batch._params[paramOffset + 1]._uint;
+    const GLfloat* value = (const GLfloat*)batch.editData(batch._params[paramOffset + 0]._uint);
+    glUniform4fv(location, count, value);
 
     (void) CHECK_GL_ERROR();
 }
@@ -710,46 +746,4 @@ void Batch::_glLineWidth(GLfloat width) {
 void GLBackend::do_glLineWidth(Batch& batch, uint32 paramOffset) {
     glLineWidth(batch._params[paramOffset]._float);
     (void) CHECK_GL_ERROR();
-}
-
-void GLBackend::loadMatrix(GLenum target, const glm::mat4 & m) {
-    glMatrixMode(target);
-    glLoadMatrixf(glm::value_ptr(m));
-}
-
-void GLBackend::fetchMatrix(GLenum target, glm::mat4 & m) {
-    switch (target) {
-    case GL_MODELVIEW_MATRIX:
-    case GL_PROJECTION_MATRIX:
-        break;
-
-    // Lazy cheating
-    case GL_MODELVIEW:
-        target = GL_MODELVIEW_MATRIX;
-        break;
-    case GL_PROJECTION:
-        target = GL_PROJECTION_MATRIX;
-        break;
-    default:
-        Q_ASSERT_X(false, "GLBackend::fetchMatrix", "Bad matrix target");
-    }
-    glGetFloatv(target, glm::value_ptr(m));
-}
-
-void GLBackend::checkGLStackStable(std::function<void()> f) {
-#ifdef DEBUG
-    GLint mvDepth, prDepth;
-    glGetIntegerv(GL_MODELVIEW_STACK_DEPTH, &mvDepth);
-    glGetIntegerv(GL_PROJECTION_STACK_DEPTH, &prDepth);
-#endif
-
-    f();
-
-#ifdef DEBUG
-    GLint mvDepthFinal, prDepthFinal;
-    glGetIntegerv(GL_MODELVIEW_STACK_DEPTH, &mvDepthFinal);
-    glGetIntegerv(GL_PROJECTION_STACK_DEPTH, &prDepthFinal);
-    Q_ASSERT(mvDepth == mvDepthFinal);
-    Q_ASSERT(prDepth == prDepthFinal);
-#endif
 }

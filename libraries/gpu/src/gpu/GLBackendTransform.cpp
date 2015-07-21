@@ -15,7 +15,6 @@
 using namespace gpu;
 
 // Transform Stage
-
 void GLBackend::do_setModelTransform(Batch& batch, uint32 paramOffset) {
     _transform._model = batch._transforms.get(batch._params[paramOffset]._uint);
     _transform._invalidModel = true;
@@ -33,9 +32,13 @@ void GLBackend::do_setProjectionTransform(Batch& batch, uint32 paramOffset) {
 
 void GLBackend::do_setViewportTransform(Batch& batch, uint32 paramOffset) {
     memcpy(&_transform._viewport, batch.editData(batch._params[paramOffset]._uint), sizeof(Vec4i));
+
+    // Where we assign the GL viewport
+    glViewport(_transform._viewport.x, _transform._viewport.y, _transform._viewport.z, _transform._viewport.w);
+
+    // The Viewport is tagged invalid because the CameraTransformUBO is not up to date and willl need update on next drawcall
     _transform._invalidViewport = true;
 }
-
 
 void GLBackend::initTransform() {
  #if (GPU_TRANSFORM_PROFILE == GPU_CORE)
@@ -68,7 +71,7 @@ void GLBackend::syncTransformStateCache() {
     _transform._invalidView = true;
     _transform._invalidModel = true;
 
-     glGetIntegerv(GL_VIEWPORT, (GLint*) &_transform._viewport);
+    glGetIntegerv(GL_VIEWPORT, (GLint*) &_transform._viewport);
 
     GLint currentMode;
     glGetIntegerv(GL_MATRIX_MODE, &currentMode);
@@ -84,14 +87,9 @@ void GLBackend::syncTransformStateCache() {
 }
 
 void GLBackend::updateTransform() {
-    GLint originalMatrixMode;
-    glGetIntegerv(GL_MATRIX_MODE, &originalMatrixMode);
     // Check all the dirty flags and update the state accordingly
     if (_transform._invalidViewport) {
         _transform._transformCamera._viewport = glm::vec4(_transform._viewport);
-
-        // Where we assign the GL viewport
-        glViewport(_transform._viewport.x, _transform._viewport.y, _transform._viewport.z, _transform._viewport.w);
     }
 
     if (_transform._invalidProj) {
@@ -116,18 +114,18 @@ void GLBackend::updateTransform() {
     }
  
  #if (GPU_TRANSFORM_PROFILE == GPU_CORE)
-   if (_transform._invalidView || _transform._invalidProj || _transform._invalidViewport) {
+    if (_transform._invalidView || _transform._invalidProj || _transform._invalidViewport) {
         glBindBufferBase(GL_UNIFORM_BUFFER, TRANSFORM_CAMERA_SLOT, 0);
         glBindBuffer(GL_ARRAY_BUFFER, _transform._transformCameraBuffer);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(_transform._transformCamera), (const void*) &_transform._transformCamera, GL_DYNAMIC_DRAW);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(_transform._transformCamera), (const void*)&_transform._transformCamera);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
         CHECK_GL_ERROR();
-   }
+    }
 
     if (_transform._invalidModel) {
         glBindBufferBase(GL_UNIFORM_BUFFER, TRANSFORM_OBJECT_SLOT, 0);
         glBindBuffer(GL_ARRAY_BUFFER, _transform._transformObjectBuffer);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(_transform._transformObject), (const void*) &_transform._transformObject, GL_DYNAMIC_DRAW);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(_transform._transformObject), (const void*) &_transform._transformObject);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
         CHECK_GL_ERROR();
     }
@@ -140,6 +138,9 @@ void GLBackend::updateTransform() {
 
 #if (GPU_TRANSFORM_PROFILE == GPU_LEGACY)
     // Do it again for fixed pipeline until we can get rid of it
+     GLint originalMatrixMode;
+     glGetIntegerv(GL_MATRIX_MODE, &originalMatrixMode);
+    
     if (_transform._invalidProj) {
         if (_transform._lastMode != GL_PROJECTION) {
             glMatrixMode(GL_PROJECTION);
@@ -175,12 +176,12 @@ void GLBackend::updateTransform() {
         }
         (void) CHECK_GL_ERROR();
     }
+
+    glMatrixMode(originalMatrixMode);
 #endif
 
     // Flags are clean
     _transform._invalidView = _transform._invalidProj = _transform._invalidModel = _transform._invalidViewport = false;
-
-    glMatrixMode(originalMatrixMode);
 }
 
 

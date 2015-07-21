@@ -19,19 +19,12 @@
 #include <HeadData.h>
 
 #include "FaceModel.h"
-#include "InterfaceConfig.h"
 #include "world.h"
 
-enum eyeContactTargets {
-    LEFT_EYE, 
-    RIGHT_EYE, 
-    MOUTH
-};
 
 const float EYE_EAR_GAP = 0.08f;
 
 class Avatar;
-class ProgramObject;
 
 class Head : public HeadData {
 public:
@@ -77,6 +70,7 @@ public:
     const glm::vec3& getLeftEyePosition() const { return _leftEyePosition; }
     glm::vec3 getRightEarPosition() const { return _rightEyePosition + (getRightDirection() * EYE_EAR_GAP) + (getFrontDirection() * -EYE_EAR_GAP); }
     glm::vec3 getLeftEarPosition() const { return _leftEyePosition + (getRightDirection() * -EYE_EAR_GAP) + (getFrontDirection() * -EYE_EAR_GAP); }
+    glm::vec3 getMouthPosition() const { return _eyePosition - getUpDirection() * glm::length(_rightEyePosition - _leftEyePosition); }
 
     FaceModel& getFaceModel() { return _faceModel; }
     const FaceModel& getFaceModel() const { return _faceModel; }
@@ -148,7 +142,7 @@ private:
     FaceModel _faceModel;
     
     glm::vec3 _correctedLookAtPosition;
-    
+
     int _leftEyeLookAtID;
     int _rightEyeLookAtID;
     
