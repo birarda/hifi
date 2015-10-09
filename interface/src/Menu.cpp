@@ -33,6 +33,7 @@
 #include "MainWindow.h"
 #include "scripting/MenuScriptingInterface.h"
 #include "ui/AssetUploadDialogFactory.h"
+#include "ui/DeveloperToolsWindow.h"
 #include "ui/DialogsManager.h"
 #include "ui/StandAloneJSConsole.h"
 #include "InterfaceLogging.h"
@@ -583,6 +584,9 @@ Menu::Menu() {
 
     addCheckableActionToQMenuAndActionHash(developerMenu, MenuOption::DisplayCrashOptions, 0, true);
     addActionToQMenuAndActionHash(developerMenu, MenuOption::CrashInterface, 0, qApp, SLOT(crashApplication()));
+    
+    auto& developerToolsManager = DeveloperToolsWindowManager::getInstance();
+    addActionToQMenuAndActionHash(developerMenu, MenuOption::DeveloperTools, 0, &developerToolsManager, SLOT(showWindow()));
 
     MenuWrapper* helpMenu = addMenu("Help");
     addActionToQMenuAndActionHash(helpMenu, MenuOption::EditEntitiesHelp, 0, qApp, SLOT(showEditEntitiesHelp()));

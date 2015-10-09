@@ -168,6 +168,7 @@ namespace MenuOption {
     const QString CrashInterface = "Crash Interface";
     const QString DebugAmbientOcclusion = "Debug Ambient Occlusion";
     const QString DecreaseAvatarSize = "Decrease Avatar Size";
+    const QString DeveloperTools = "Developer Tools";
     const QString DeleteBookmark = "Delete Bookmark...";
     const QString DisableActivityLogger = "Disable Activity Logger";
     const QString DisableEyelidAdjustment = "Disable Eyelid Adjustment";

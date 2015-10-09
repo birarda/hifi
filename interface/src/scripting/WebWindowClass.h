@@ -16,6 +16,8 @@
 #include <QScriptEngine>
 #include <QWebView>
 
+#include <glm/glm.hpp>
+
 class ScriptEventBridge : public QObject {
     Q_OBJECT
 public:
