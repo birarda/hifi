@@ -12,6 +12,8 @@
 #ifndef hifi_WebWindowClass_h
 #define hifi_WebWindowClass_h
 
+#include <glm/vec3.hpp>
+
 #include <QScriptContext>
 #include <QScriptEngine>
 #include <QWebView>

@@ -248,7 +248,6 @@ public slots:
     void setLowVelocityFilter(bool lowVelocityFilter);
     void loadDialog();
     void loadScriptURLDialog();
-    void toggleLogDialog();
     void toggleRunningScriptsWidget();
 
     void showFriendsWindow();
@@ -460,7 +459,6 @@ private:
     NodeToJurisdictionMap _entityServerJurisdictions;
     NodeToOctreeSceneStats _octreeServerSceneStats;
     ControllerScriptingInterface* _controllerScriptingInterface{ nullptr };
-    QPointer<LogDialog> _logDialog;
     QPointer<SnapshotShareDialog> _snapshotShareDialog;
 
     FileLogger* _logger;

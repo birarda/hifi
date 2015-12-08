@@ -4617,18 +4617,6 @@ void Application::loadScriptURLDialog() {
     }
 }
 
-void Application::toggleLogDialog() {
-    if (! _logDialog) {
-        _logDialog = new LogDialog(_glWidget, getLogger());
-    }
-
-    if (_logDialog->isVisible()) {
-        _logDialog->hide();
-    } else {
-        _logDialog->show();
-    }
-}
-
 void Application::takeSnapshot() {
     QMediaPlayer* player = new QMediaPlayer();
     QFileInfo inf = QFileInfo(PathUtils::resourcesPath() + "sounds/snap.wav");

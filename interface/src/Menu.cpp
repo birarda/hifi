@@ -34,6 +34,7 @@
 #include "MainWindow.h"
 #include "scripting/MenuScriptingInterface.h"
 #include "ui/AssetUploadDialogFactory.h"
+#include "ui/DeveloperToolsWindow.h"
 #include "ui/DialogsManager.h"
 #include "ui/StandAloneJSConsole.h"
 #include "InterfaceLogging.h"
@@ -318,9 +319,14 @@ Menu::Menu() {
     QActionGroup* inputModeGroup = new QActionGroup(inputModeMenu);
     inputModeGroup->setExclusive(false);
 
-
     // Developer menu ----------------------------------
     MenuWrapper* developerMenu = addMenu("Developer", "Developer");
+
+    auto& developerToolsManager = DeveloperToolsWindowManager::getInstance();
+    addActionToQMenuAndActionHash(viewMenu, MenuOption::Log,
+                                  Qt::CTRL | Qt::SHIFT | Qt::Key_L,
+                                  &developerToolsManager, SLOT(showWindow())
+                                  );
 
     // Developer > Render >>>
     MenuWrapper* renderOptionsMenu = developerMenu->addMenu("Render");
