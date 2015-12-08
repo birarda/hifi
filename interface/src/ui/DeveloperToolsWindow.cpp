@@ -26,10 +26,11 @@ void DeveloperToolsWindowManager::showWindow() {
     _window->setVisible(true);
 }
 
+// currently because it's the only view available the developer tools window goes right to the log
 const QString DEV_TOOLS_INDEX_PATH = "html/dev-tools/log.html";
 
 DeveloperToolsWindow::DeveloperToolsWindow() :
-    WebWindowClass("Developer Tools", PathUtils::resourcesPath() + DEV_TOOLS_INDEX_PATH, 400, 400)
+    WebWindowClass("Log", PathUtils::resourcesPath() + DEV_TOOLS_INDEX_PATH, 400, 400)
 {
     
 }
