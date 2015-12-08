@@ -20,6 +20,8 @@ class DeveloperToolsWindow : public WebWindowClass {
     Q_OBJECT
 public:
     DeveloperToolsWindow();
+private:
+
 };
 
 class DeveloperToolsWindowManager : public QObject {
@@ -29,9 +31,11 @@ public:
     
 public slots:
     void showWindow();
+    void handleLogLine(QtMsgType type, const QString& message) { _logLines << message; }
 
 private:
     DeveloperToolsWindow* _window { nullptr };
+    QStringList _logLines;
 };
 
 

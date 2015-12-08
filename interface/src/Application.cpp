@@ -153,6 +153,7 @@
 #include "ui/AvatarInputs.h"
 #include "ui/AssetUploadDialogFactory.h"
 #include "ui/DataWebDialog.h"
+#include "ui/DeveloperToolsWindow.h"
 #include "ui/DialogsManager.h"
 #include "ui/LoginDialog.h"
 #include "ui/overlays/Cube3DOverlay.h"
@@ -162,8 +163,6 @@
 #include "ui/UpdateDialog.h"
 #include "Util.h"
 #include "InterfaceParentFinder.h"
-
-
 
 // ON WIndows PC, NVidia Optimus laptop, we want to enable NVIDIA GPU
 // FIXME seems to be broken.
@@ -286,6 +285,10 @@ public:
 
 void messageHandler(QtMsgType type, const QMessageLogContext& context, const QString& message) {
     QString logMessage = LogHandler::getInstance().printMessage((LogMsgType) type, context, message);
+
+    // pass this log line to the DeveloperToolsWindowManager
+    auto& devToolsManager = DeveloperToolsWindowManager::getInstance();
+    devToolsManager.handleLogLine(type, logMessage);
 
     if (!logMessage.isEmpty()) {
 #ifdef Q_OS_WIN
@@ -439,7 +442,7 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer) :
     installNativeEventFilter(&MyNativeEventFilter::getInstance());
 #endif
 
-    _logger = new FileLogger(this);  // After setting organization name in order to get correct directory
+    _logger = new FileLogger(this);  // After setting organization name in order to get correct directory    
 
     QFontDatabase::addApplicationFont(PathUtils::resourcesPath() + "styles/Inconsolata.otf");
     _window->setWindowTitle("Interface");

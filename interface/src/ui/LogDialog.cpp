@@ -63,8 +63,6 @@ LogDialog::LogDialog(QWidget* parent, AbstractLoggerInterface* logger) : QDialog
     resize(INITIAL_WIDTH, static_cast<int>(screen.height() * INITIAL_HEIGHT_RATIO));
     move(screen.center() - rect().center());
     setMinimumWidth(MINIMAL_WIDTH);
-
-    connect(_logger, SIGNAL(logReceived(QString)), this, SLOT(appendLogLine(QString)), Qt::QueuedConnection);
 }
 
 LogDialog::~LogDialog() {
