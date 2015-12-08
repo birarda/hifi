@@ -65,14 +65,14 @@ LimitedNodeList::LimitedNodeList(unsigned short socketListenPort, unsigned short
     qRegisterMetaType<ConnectionStep>("ConnectionStep");
 
     _nodeSocket.bind(QHostAddress::AnyIPv4, socketListenPort);
-    qCDebug(networking) << "NodeList socket is listening on" << _nodeSocket.localPort();
+    qCInfo(networking) << "NodeList socket is listening on" << _nodeSocket.localPort();
 
     if (dtlsListenPort > 0) {
         // only create the DTLS socket during constructor if a custom port is passed
         _dtlsSocket = new QUdpSocket(this);
 
         _dtlsSocket->bind(QHostAddress::AnyIPv4, dtlsListenPort);
-        qCDebug(networking) << "NodeList DTLS socket is listening on" << _dtlsSocket->localPort();
+        qCInfo(networking) << "NodeList DTLS socket is listening on" << _dtlsSocket->localPort();
     }
 
     // check for local socket updates every so often
@@ -870,9 +870,9 @@ void LimitedNodeList::updateLocalSockAddr() {
     if (newSockAddr != _localSockAddr) {
 
         if (_localSockAddr.isNull()) {
-            qCDebug(networking) << "Local socket is" << newSockAddr;
+            qCInfo(networking) << "Local socket is" << newSockAddr;
         } else {
-            qCDebug(networking) << "Local socket has changed from" << _localSockAddr << "to" << newSockAddr;
+            qCInfo(networking) << "Local socket has changed from" << _localSockAddr << "to" << newSockAddr;
         }
 
         _localSockAddr = newSockAddr;
