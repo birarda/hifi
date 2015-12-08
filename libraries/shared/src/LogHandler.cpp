@@ -44,6 +44,8 @@ const char* stringForLogType(LogMsgType msgType) {
     switch (msgType) {
         case LogDebug:
             return "DEBUG";
+        case LogInfo:
+            return "INFO";
         case LogWarning:
             return "WARNING";
         case LogCritical:

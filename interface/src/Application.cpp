@@ -291,8 +291,10 @@ void messageHandler(QtMsgType type, const QMessageLogContext& context, const QSt
 #ifdef Q_OS_WIN
         OutputDebugStringA(logMessage.toLocal8Bit().constData());
         OutputDebugStringA("\n");
-#endif
-        qApp->getLogger()->addMessage(qPrintable(logMessage + "\n"));
+#endif 
+        if (qApp && qApp->getLogger()) {
+             qApp->getLogger()->addMessage(qPrintable(logMessage + "\n"));
+        }
     }
 }
 
@@ -300,9 +302,13 @@ bool setupEssentials(int& argc, char** argv) {
     unsigned int listenPort = 0; // bind to an ephemeral port by default
     const char** constArgv = const_cast<const char**>(argv);
     const char* portStr = getCmdOption(argc, constArgv, "--listenPort");
+
     if (portStr) {
         listenPort = atoi(portStr);
     }
+
+    qInstallMessageHandler(messageHandler);
+
     // Set build version
     QCoreApplication::setApplicationVersion(BUILD_VERSION);
 
@@ -435,8 +441,6 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer) :
 
     _logger = new FileLogger(this);  // After setting organization name in order to get correct directory
 
-    qInstallMessageHandler(messageHandler);
-
     QFontDatabase::addApplicationFont(PathUtils::resourcesPath() + "styles/Inconsolata.otf");
     _window->setWindowTitle("Interface");
 
@@ -444,7 +448,7 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer) :
 
     auto nodeList = DependencyManager::get<NodeList>();
 
-    qCDebug(interfaceapp) << "[VERSION] Build sequence:" << qPrintable(applicationVersion());
+    qCInfo(interfaceapp) << "[VERSION] Build sequence:" << qPrintable(applicationVersion());
 
     _bookmarks = new Bookmarks();  // Before setting up the menu
 
