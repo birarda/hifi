@@ -34,7 +34,7 @@
 #include "MainWindow.h"
 #include "scripting/MenuScriptingInterface.h"
 #include "ui/AssetUploadDialogFactory.h"
-#include "ui/DeveloperTools.h"
+#include "ui/DeveloperToolsWindow.h"
 #include "ui/DialogsManager.h"
 #include "ui/StandAloneJSConsole.h"
 #include "InterfaceLogging.h"
@@ -271,7 +271,8 @@ Menu::Menu() {
         addressManager.data(), SLOT(copyAddress()),
         QAction::NoRole, UNSPECIFIED_POSITION, "Advanced");
 
-    auto& developerToolsManager = DeveloperTools::WindowManager::getInstance();
+    auto& developerToolsManager = DeveloperToolsWindowManager::getInstance();
+
     addActionToQMenuAndActionHash(viewMenu, MenuOption::Log,
         Qt::CTRL | Qt::SHIFT | Qt::Key_L,
         &developerToolsManager, SLOT(showWindow())

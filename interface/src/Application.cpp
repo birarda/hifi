@@ -4621,6 +4621,7 @@ void Application::loadScriptURLDialog() {
             // the user input a new hostname, use that
             newScript = scriptURLDialog.textValue();
         }
+        
         DependencyManager::get<ScriptEngines>()->loadScript(newScript);
     }
 }
