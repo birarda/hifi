@@ -286,7 +286,22 @@ public:
 };
 
 void messageHandler(QtMsgType type, const QMessageLogContext& context, const QString& message) {
-    LogHandler::getInstance().printMessage((LogMsgType) type, context, message);
+
+    QString logMessage = LogHandler::getInstance().printMessage((LogMsgType) type, context, message);
+
+    // pass this log line to the DeveloperToolsWindowManager
+    auto& devToolsManager = DeveloperTools::WindowManager::getInstance();
+    devToolsManager.handleLogLine(type, logMessage);
+
+    if (!logMessage.isEmpty()) {
+#ifdef Q_OS_WIN
+        OutputDebugStringA(logMessage.toLocal8Bit().constData());
+        OutputDebugStringA("\n");
+#endif 
+        if (qApp && qApp->getLogger()) {
+             qApp->getLogger()->addMessage(qPrintable(logMessage + "\n"));
+        }
+    }
 }
 
 bool setupEssentials(int& argc, char** argv) {

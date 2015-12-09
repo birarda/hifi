@@ -15,6 +15,7 @@
 
 #include <PathUtils.h>
 
+<<<<<<< HEAD
 #include "../Application.h"
 
 using namespace DeveloperTools;
@@ -54,6 +55,10 @@ void ScriptingInterface::revealLogFile() {
     }
 }
 
+=======
+using namespace DeveloperTools;
+
+>>>>>>> pass log to DeveloperTools::Window via script interface
 WindowManager& WindowManager::getInstance() {
     static WindowManager staticInstance;
     return staticInstance;
@@ -78,4 +83,26 @@ void WindowManager::addToolsObjectToWindow() {
     }
 }
 
+<<<<<<< HEAD
 
+=======
+// currently because it's the only view available the developer tools window goes right to the log
+const QString DEV_TOOLS_INDEX_PATH = "html/dev-tools/log.html";
+
+Window::Window() {
+
+#ifndef Q_NO_DEBUG
+    // in debug, allow the web inspector on QWebView
+    QWebSettings::globalSettings()->setAttribute(QWebSettings::DeveloperExtrasEnabled, true);
+#endif
+
+    // set the window title
+    setWindowTitle("Log");
+
+    // delete the dialog on close
+    setAttribute(Qt::WA_DeleteOnClose);
+
+    // set the URL of the window to show the log
+    setUrl(QUrl::fromLocalFile(PathUtils::resourcesPath() + DEV_TOOLS_INDEX_PATH));
+}
+>>>>>>> pass log to DeveloperTools::Window via script interface
