@@ -153,7 +153,7 @@
 #include "ui/AvatarInputs.h"
 #include "ui/AssetUploadDialogFactory.h"
 #include "ui/DataWebDialog.h"
-#include "ui/DeveloperToolsWindow.h"
+#include "ui/DeveloperTools.h"
 #include "ui/DialogsManager.h"
 #include "ui/LoginDialog.h"
 #include "ui/overlays/Cube3DOverlay.h"
@@ -287,7 +287,7 @@ void messageHandler(QtMsgType type, const QMessageLogContext& context, const QSt
     QString logMessage = LogHandler::getInstance().printMessage((LogMsgType) type, context, message);
 
     // pass this log line to the DeveloperToolsWindowManager
-    auto& devToolsManager = DeveloperToolsWindowManager::getInstance();
+    auto& devToolsManager = DeveloperTools::WindowManager::getInstance();
     devToolsManager.handleLogLine(type, logMessage);
 
     if (!logMessage.isEmpty()) {

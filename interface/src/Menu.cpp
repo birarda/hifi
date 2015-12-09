@@ -34,7 +34,7 @@
 #include "MainWindow.h"
 #include "scripting/MenuScriptingInterface.h"
 #include "ui/AssetUploadDialogFactory.h"
-#include "ui/DeveloperToolsWindow.h"
+#include "ui/DeveloperTools.h"
 #include "ui/DialogsManager.h"
 #include "ui/StandAloneJSConsole.h"
 #include "InterfaceLogging.h"
@@ -271,6 +271,12 @@ Menu::Menu() {
         addressManager.data(), SLOT(copyAddress()),
         QAction::NoRole, UNSPECIFIED_POSITION, "Advanced");
 
+    auto& developerToolsManager = DeveloperTools::WindowManager::getInstance();
+    addActionToQMenuAndActionHash(viewMenu, MenuOption::Log,
+        Qt::CTRL | Qt::SHIFT | Qt::Key_L,
+        &developerToolsManager, SLOT(showWindow())
+    );
+
     // Navigate > Copy Path [advanced]
     addActionToQMenuAndActionHash(navigateMenu, MenuOption::CopyPath, 0,
         addressManager.data(), SLOT(copyPath()),
@@ -321,12 +327,6 @@ Menu::Menu() {
 
     // Developer menu ----------------------------------
     MenuWrapper* developerMenu = addMenu("Developer", "Developer");
-
-    auto& developerToolsManager = DeveloperToolsWindowManager::getInstance();
-    addActionToQMenuAndActionHash(viewMenu, MenuOption::Log,
-                                  Qt::CTRL | Qt::SHIFT | Qt::Key_L,
-                                  &developerToolsManager, SLOT(showWindow())
-                                  );
 
     // Developer > Render >>>
     MenuWrapper* renderOptionsMenu = developerMenu->addMenu("Render");
