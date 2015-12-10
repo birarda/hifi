@@ -26,10 +26,19 @@ $(function(){
         ordering: false
     });
 
+    function addRowToTable(index, message) {
+        var messageArray = sanitizedMessageArray(index, message)
+        var row = table.row.add(messageArray).node();
+
+        // add the message type as a class to this row
+        $(row).addClass(messageArray[1].toLowerCase());
+    }
+
     // when we get a new log entry, sanitize it and add it to the table
     Developer.newLogLine.connect(function(index, message){
         if (index >= table.data.length) {
-            table.row.add(sanitizedMessageArray(index, message)).draw(false);
+            addRowToTable(index, message);
+            table.draw(false);
 
             // window.scrollTo(0, document.body.scrollHeight);
         }
@@ -37,17 +46,19 @@ $(function(){
 
     // enumerate the current log entries and set them up for DataTables
     $.each(Developer.log, function(index, message) {
-        table.row.add(sanitizedMessageArray(index, message));
+        addRowToTable(index, message);
     });
+
+    table.draw();
 
     // change the column filter if the user asks for verbose debug
     $('#verbose-debug-checkbox').change(function(){
         if (this.checked) {
             // show the debug output in the table
-            table.columns(2).search('').draw();
+            table.columns(1).search('').draw();
         } else {
             // hide the debug output in the table
-            table.columns(2).search('^(?:(?!DEBUG).)*$', true).draw();
+            // table.columns(1).search('^(?:(?!DEBUG).)*$', true).draw();
         }
     });
 
