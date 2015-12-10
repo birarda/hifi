@@ -41,8 +41,8 @@ void ScriptingInterface::handleLogLine(QtMsgType type, const QString& message) {
     // add the log line to our in-memory QStringList
     _logLines << message;
 
-    // emit a signal that the Window can handle if its already open
-    emit newLogLine(message);
+    // emit our signal to say that a new log line has been added
+    emit newLogLine(_logLines.size() - 1, message);
 }
 
 WindowManager& WindowManager::getInstance() {

@@ -22,20 +22,21 @@ namespace DeveloperTools {
         Q_OBJECT
     public:
         Window();
-    private:
-
     };
 
     class ScriptingInterface : public QObject {
         Q_OBJECT
         Q_PROPERTY(QStringList log READ getLogLines)
-    public slots:
-        void handleLogLine(QtMsgType type, const QString& message);
     signals:
-        void newLogLine(const QString& message);
+        void newLogLine(int index, const QString& message);
+
     private:
+        void handleLogLine(QtMsgType type, const QString& message);
+
         const QStringList& getLogLines() const { return _logLines; }
         QStringList _logLines;
+
+        friend class WindowManager;
     };
 
     class WindowManager : public QObject {

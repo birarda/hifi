@@ -1,0 +1,64 @@
+
+table {
+  color: #6c6c6c;
+  font-family: Helvetica, Arial, sans-serif;
+
+  /* Table reset  */
+  border-collapse: collapse; border-spacing: 0;
+}
+
+td, th {  border: 0 none; height: 25px; }
+
+th {
+  /* Table headers */
+	background: linear-gradient(#666 0%,#aaa 100%);
+	color: #FFF;
+	height: 40px;
+	text-align: left;
+}
+/* Zebra Stripe Rows */
+
+tr:nth-child(even) td { background: rgba(247, 247, 247, 0.5); }
+tr:nth-child(odd) td { background: rgba(255, 255, 255, 0.5); }
+
+td { background: #FAFAFA; text-align: left; word-wrap: break-word;}
+
+/* First-child blank cells! */
+tr td:first-child, tr th:first-child {
+	background: none;
+	font-style: italic;
+	font-size: 14px;
+	text-align: right;
+	padding-right: 10px;
+	width: 80px;
+}
+
+/* Add border-radius to inset cell*/
+tr:first-child th:nth-child(2) {
+   border-radius: 8px 0 0 0;
+}
+tr:first-child th:nth-child(3) {
+   border-radius: 0 8px 0 0;
+}
+
+/* Search styling */
+
+input {
+	background:  #fff;
+	border: 0 none;
+	color: #7F7F7F;
+	float: right;
+	font: 16px 'Helvetica','Arial',sans-serif;
+	height: 20px;
+	margin: 6px;
+	transition: background 0.3s ease-in-out 0s;
+	width: 300px;
+}
+
+label {
+	font: 16px 'Helvetica','Arial',sans-serif;
+	color: #a9a9a9;
+
+tr:first-child th:last-child {
+  border-radius: 0 5px 0 0;
+}
