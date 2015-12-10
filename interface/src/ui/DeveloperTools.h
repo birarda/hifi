@@ -30,7 +30,9 @@ namespace DeveloperTools {
         Q_OBJECT
         Q_PROPERTY(QStringList log READ getLogLines)
     public slots:
-        void handleLogLine(QtMsgType type, const QString& message) { _logLines << message; }
+        void handleLogLine(QtMsgType type, const QString& message);
+    signals:
+        void newLogLine(const QString& message);
     private:
         const QStringList& getLogLines() const { return _logLines; }
         QStringList _logLines;

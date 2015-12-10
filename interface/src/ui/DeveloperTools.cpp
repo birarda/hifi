@@ -17,6 +17,34 @@
 
 using namespace DeveloperTools;
 
+// currently because it's the only view available the developer tools window goes right to the log
+const QString DEV_TOOLS_INDEX_PATH = "html/dev-tools/log.html";
+
+Window::Window() {
+
+#ifndef Q_NO_DEBUG
+    // in debug, allow the web inspector on QWebView
+    QWebSettings::globalSettings()->setAttribute(QWebSettings::DeveloperExtrasEnabled, true);
+#endif
+
+    // set the window title
+    setWindowTitle("Log");
+
+    // delete the dialog on close
+    setAttribute(Qt::WA_DeleteOnClose);
+
+    // set the URL of the window to show the log
+    setUrl(QUrl::fromLocalFile(PathUtils::resourcesPath() + DEV_TOOLS_INDEX_PATH));
+}
+
+void ScriptingInterface::handleLogLine(QtMsgType type, const QString& message) {
+    // add the log line to our in-memory QStringList
+    _logLines << message;
+
+    // emit a signal that the Window can handle if its already open
+    emit newLogLine(message);
+}
+
 WindowManager& WindowManager::getInstance() {
     static WindowManager staticInstance;
     return staticInstance;
@@ -41,22 +69,4 @@ void WindowManager::addToolsObjectToWindow() {
     }
 }
 
-// currently because it's the only view available the developer tools window goes right to the log
-const QString DEV_TOOLS_INDEX_PATH = "html/dev-tools/log.html";
 
-Window::Window() {
-
-#ifndef Q_NO_DEBUG
-    // in debug, allow the web inspector on QWebView
-    QWebSettings::globalSettings()->setAttribute(QWebSettings::DeveloperExtrasEnabled, true);
-#endif
-
-    // set the window title
-    setWindowTitle("Log");
-
-    // delete the dialog on close
-    setAttribute(Qt::WA_DeleteOnClose);
-
-    // set the URL of the window to show the log
-    setUrl(QUrl::fromLocalFile(PathUtils::resourcesPath() + DEV_TOOLS_INDEX_PATH));
-}
