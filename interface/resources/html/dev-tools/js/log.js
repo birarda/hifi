@@ -1,9 +1,12 @@
 $(function(){
 
-    var testLog = [
-        "[12/09 15:58:04] [WARNING] Could not attach to shared memory at key \"domain-server.local-port\"",
-        "[12/09 15:58:04] [DEBUG] Clearing the NodeList. Deleting all nodes in list."
-    ]
+    // uncomment this to test styling without needing interface
+    var Developer = {
+        log: [
+            "[12/09 15:58:04] [WARNING] Could not attach to shared memory at key \"domain-server.local-port\"",
+            "[12/09 15:58:04] [DEBUG] Clearing the NodeList. Deleting all nodes in list."
+        ]
+    };
 
     var sanitizedLog = [];
 
@@ -23,7 +26,7 @@ $(function(){
     });
 
     // create a DataTable with the current log entries
-    $("#log").DataTable({
+    var table = $("#log").DataTable({
         data: sanitizedLog,
         columns: [
             { title: "Time" },
@@ -33,4 +36,18 @@ $(function(){
         bPaginate: false,
         ordering: false
     });
+
+    // change the column filter if the user asks for verbose debug
+    $('#verbose-debug-checkbox').change(function(){
+        if (this.checked) {
+            // show the debug output in the table
+            table.columns(1).search('').draw();
+        } else {
+            // hide the debug output in the table
+            table.columns(1).search('^(?:(?!DEBUG).)*$', true).draw();
+        }
+    });
+
+    // fire the change event on the verbose debug checkbox to start with the right value
+    $('#verbose-debug-checkbox').change();
 })
