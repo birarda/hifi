@@ -37,8 +37,8 @@ $(function(){
     // when we get a new log entry, sanitize it and add it to the table
     Developer.newLogLine.connect(function(index, message){
         if (index >= table.data.length) {
-            addRowToTable(index, message);
-            table.draw(false);
+            // addRowToTable(index, message);
+            // table.draw(false);
 
             // window.scrollTo(0, document.body.scrollHeight);
         }

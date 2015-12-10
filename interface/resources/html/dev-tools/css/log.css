@@ -18,8 +18,8 @@ th {
 }
 /* Zebra Stripe Rows */
 
-tr:nth-child(even) td { background: rgba(247, 247, 247, 0.5); }
-tr:nth-child(odd) td { background: rgba(255, 255, 255, 0.5); }
+tr:nth-child(even) td { background: rgb(247, 247, 247); }
+tr:nth-child(odd) td { background: rgb(255, 255, 255); }
 
 td { background: #FAFAFA; text-align: left; word-wrap: break-word;}
 
@@ -56,9 +56,34 @@ input {
 }
 
 label {
-	font: 16px 'Helvetica','Arial',sans-serif;
-	color: #a9a9a9;
+    font: 16px 'Helvetica','Arial',sans-serif;
+    color: #a9a9a9;
+}
 
-tr:first-child th:last-child {
+tr:first-child, th:last-child {
   border-radius: 0 5px 0 0;
+}
+
+tr td:nth-child(2) {
+    color: white;
+}
+
+tr.debug td:nth-child(2), tr.suppressed td:nth-child(2){
+    background-color: #00B4A3 !important;
+}
+
+tr.info td:nth-child(2) {
+    background-color: #1398B9 !important;
+}
+
+tr.warning td:nth-child(2) {
+    background-color: #EA6928 !important;
+}
+
+tr.critical td:nth-child(2) {
+    background-color: #9A3974 !important;
+}
+
+tr.fatal td:nth-child(2) {
+    background-color: #000000 !important;
 }
