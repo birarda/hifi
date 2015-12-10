@@ -314,7 +314,7 @@ bool MainWindow::getLocalServerPortFromSharedMemory(const QString key, QSharedMe
         sharedMem = new QSharedMemory(key, this);
 
         if (!sharedMem->attach(QSharedMemory::ReadOnly)) {
-            qWarning() << "Could not attach to shared memory at key" << key;
+            qDebug() << "Could not attach to shared memory at key" << key;
         }
     }
 

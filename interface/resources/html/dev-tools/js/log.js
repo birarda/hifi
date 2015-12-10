@@ -58,7 +58,7 @@ $(function(){
             table.columns(1).search('').draw();
         } else {
             // hide the debug output in the table
-            // table.columns(1).search('^(?:(?!DEBUG).)*$', true).draw();
+            table.columns(1).search('^(?:(?!DEBUG).)*$', true).draw();
         }
     });
 
