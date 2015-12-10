@@ -11,14 +11,13 @@ $(function(){
         var typeEnd = message.indexOf(']', timeEnd + 1);
         var type = message.substring(typeStart, typeEnd);
 
-        return [index, time, type, message.substring(typeEnd + 1)];
+        return [time, type, message.substring(typeEnd + 1)];
     }
 
     // create a DataTable
     var table = $("#log").DataTable({
         data: [],
         columns: [
-            { title: "#" },
             { title: "Time" },
             { title: "Type" },
             { title: "Message" }
@@ -30,7 +29,9 @@ $(function(){
     // when we get a new log entry, sanitize it and add it to the table
     Developer.newLogLine.connect(function(index, message){
         if (index >= table.data.length) {
-            table.row.add(sanitizedMessageArray(index, message)).draw(false)
+            table.row.add(sanitizedMessageArray(index, message)).draw(false);
+
+            // window.scrollTo(0, document.body.scrollHeight);
         }
     });
 
