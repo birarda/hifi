@@ -28,6 +28,7 @@
 #include <QtCore/QAbstractNativeEventFilter>
 #include <QtCore/QMimeData>
 
+#include <QtGui/QFontDatabase>
 #include <QtGui/QScreen>
 #include <QtGui/QImage>
 #include <QtGui/QWheelEvent>
@@ -41,6 +42,7 @@
 #include <QtQuick/QQuickWindow>
 
 #include <QtWidgets/QActionGroup>
+#include <QtWidgets/QCheckBox>
 #include <QtWidgets/QDesktopWidget>
 #include <QtWidgets/QFileDialog>
 #include <QtWidgets/QInputDialog>
