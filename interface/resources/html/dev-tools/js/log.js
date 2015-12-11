@@ -1,7 +1,6 @@
 $(function(){
 
     $('.button-checkbox').each(function () {
-
         // Settings
         var $widget = $(this),
             $button = $widget.find('button'),
@@ -17,12 +16,12 @@ $(function(){
             };
 
         // Event Handlers
-        $button.on('click', function () {
+        $button.on('click', function() {
             $checkbox.prop('checked', !$checkbox.is(':checked'));
             $checkbox.triggerHandler('change');
             updateDisplay();
         });
-        $checkbox.on('change', function () {
+        $checkbox.on('change', function() {
             updateDisplay();
         });
 
@@ -34,26 +33,18 @@ $(function(){
             $button.data('state', (isChecked) ? "on" : "off");
 
             // Set the button's icon
-            $button.find('.state-icon')
-                .removeClass()
-                .addClass('state-icon ' + settings[$button.data('state')].icon);
+            $button.find('.state-icon').removeClass().addClass('state-icon ' + settings[$button.data('state')].icon);
 
             // Update the button's color
             if (isChecked) {
-                $button
-                    .removeClass('btn-default')
-                    .addClass('btn-' + color + ' active');
-            }
-            else {
-                $button
-                    .removeClass('btn-' + color + ' active')
-                    .addClass('btn-default');
+                $button.removeClass('btn-default').addClass('btn-' + color + ' active');
+            } else {
+                $button.removeClass('btn-' + color + ' active').addClass('btn-default');
             }
         }
 
         // Initialization
         function init() {
-
             updateDisplay();
 
             // Inject the icon if applicable
@@ -61,6 +52,7 @@ $(function(){
                 $button.prepend('<i class="state-icon ' + settings[$button.data('state')].icon + '"></i> ');
             }
         }
+
         init();
     });
 
@@ -134,14 +126,27 @@ $(function(){
     // change the column filter if the user asks for verbose debug
     $('#verbose-debug-checkbox').change(function(){
         if (this.checked) {
-            // show the debug output in the table
-            $('tr[data-message-type="DEBUG"]').show();
-        } else {
             // hide the debug output in the table
-            $('tr[data-message-type="DEBUG"]').hide();
+            $('tr[data-message-type="DEBUG"]').addClass('hidden-debug');
+        } else {
+            // show the debug output in the table
+            $('tr[data-message-type="DEBUG"]').removeClass('hidden-debug');
         }
     });
 
     // fire the change event on the verbose debug checkbox to start with the right value
     $('#verbose-debug-checkbox').change();
+
+    // handle filtering of table rows on input change
+    $('#filter-search').on('input', function(){
+        var filter = $(this).val().toLowerCase();
+        $('tbody tr').each(function(){
+            // decide to hide or show the row if it matches the filter
+            if (filter && $(this).text().toLowerCase().indexOf(filter) == -1) {
+                $(this).addClass('filtered');
+            } else {
+                $(this).removeClass('filtered');
+            }
+        });
+    });
 })

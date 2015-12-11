@@ -1,30 +1,35 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <meta charset="UTF-8">
-    <title>Log</title>
+    <head>
+        <meta charset="UTF-8">
+        <title>Log</title>
 
-    <link rel="stylesheet" type="text/css" href="css/bootstrap.min.css"/>
-    <link rel="stylesheet" type="text/css" href="css/bootstrap-theme.min.css"/>
-    <link rel="stylesheet" type="text/css" href="css/log.css"/>
+        <link rel="stylesheet" type="text/css" href="css/bootstrap.min.css"/>
+        <link rel="stylesheet" type="text/css" href="css/bootstrap-theme.min.css"/>
+        <link rel="stylesheet" type="text/css" href="css/log.css"/>
 
-    <script type="text/javascript" src="js/jquery-2.1.4.min.js"></script>
-    <script type="text/javascript" src="js/bootstrap.min.js"></script>
-    <script type="text/javascript" src="js/log.js"></script>
-  </head>
-  <body>
-      <span class="button-checkbox">
-        <button type="button" class="btn" data-color="primary">Show Debug</button>
-        <input type="checkbox" id="verbose-debug-checkbox" class="hidden" />
-      </span>
-      <table class="table table-hover table-condensed table-bordered" id="log">
-        <thead>
-            <th>Time</th>
-            <th>Type</th>
-            <th>Message</th>
-        </thead>
-        <tbody>
-        </tbody>
-      </table>
-  </body>
+        <script type="text/javascript" src="js/jquery-2.1.4.min.js"></script>
+        <script type="text/javascript" src="js/bootstrap.min.js"></script>
+        <script type="text/javascript" src="js/log.js"></script>
+    </head>
+    <body>
+        <div class="input-group">
+            <input type="text" id="filter-search" class="form-control" placeholder="Search">
+        </div>
+        <button type="button" class="btn btn-default" data-color="primary">Reveal Log File</button>
+        <span class="button-checkbox">
+            <button type="button" class="btn" data-color="primary">Hide Debug</button>
+            <input type="checkbox" id="verbose-debug-checkbox" class="hidden" checked="checked" />
+        </span>
+
+        <table class="table table-hover table-condensed table-bordered" id="log">
+            <thead>
+                <th>Time</th>
+                <th>Type</th>
+                <th>Message</th>
+            </thead>
+            <tbody>
+            </tbody>
+        </table>
+    </body>
 </html>

@@ -1,3 +1,15 @@
 table tbody td:nth-child(3) {
     word-break: break-all;
 }
+
+#filter-search {
+    float: right;
+}
+
+.filtered {
+    display: none;
+}
+
+.hidden-debug {
+    display: none;
+}
