@@ -1,5 +1,71 @@
 $(function(){
 
+    $('.button-checkbox').each(function () {
+
+        // Settings
+        var $widget = $(this),
+            $button = $widget.find('button'),
+            $checkbox = $widget.find('input:checkbox'),
+            color = $button.data('color'),
+            settings = {
+                on: {
+                    icon: 'glyphicon glyphicon-check'
+                },
+                off: {
+                    icon: 'glyphicon glyphicon-unchecked'
+                }
+            };
+
+        // Event Handlers
+        $button.on('click', function () {
+            $checkbox.prop('checked', !$checkbox.is(':checked'));
+            $checkbox.triggerHandler('change');
+            updateDisplay();
+        });
+        $checkbox.on('change', function () {
+            updateDisplay();
+        });
+
+        // Actions
+        function updateDisplay() {
+            var isChecked = $checkbox.is(':checked');
+
+            // Set the button's state
+            $button.data('state', (isChecked) ? "on" : "off");
+
+            // Set the button's icon
+            $button.find('.state-icon')
+                .removeClass()
+                .addClass('state-icon ' + settings[$button.data('state')].icon);
+
+            // Update the button's color
+            if (isChecked) {
+                $button
+                    .removeClass('btn-default')
+                    .addClass('btn-' + color + ' active');
+            }
+            else {
+                $button
+                    .removeClass('btn-' + color + ' active')
+                    .addClass('btn-default');
+            }
+        }
+
+        // Initialization
+        function init() {
+
+            updateDisplay();
+
+            // Inject the icon if applicable
+            if ($button.find('.state-icon').length == 0) {
+                $button.prepend('<i class="state-icon ' + settings[$button.data('state')].icon + '"></i> ');
+            }
+        }
+        init();
+    });
+
+    var tableRows = 0;
+
     function sanitizedMessageArray(index, message) {
         // pull out the time from the log entry
         var timeStart = message.indexOf('[') + 1;
@@ -14,33 +80,49 @@ $(function(){
         return [time, type, message.substring(typeEnd + 1)];
     }
 
-    // create a DataTable
-    var table = $("#log").DataTable({
-        data: [],
-        columns: [
-            { title: "Time" },
-            { title: "Type" },
-            { title: "Message" }
-        ],
-        bPaginate: false,
-        ordering: false
-    });
+    function contextualClassForType(messageType) {
+        switch(messageType) {
+            case "DEBUG":
+            case "SUPPRESS":
+                return "success";
+            case "INFO":
+                return "info";
+            case "WARNING":
+                return "warning";
+            case "FATAL":
+            case "CRITICAL":
+                return "danger";
+        }
+    }
 
     function addRowToTable(index, message) {
-        var messageArray = sanitizedMessageArray(index, message)
-        var row = table.row.add(messageArray).node();
+        var messageArray = sanitizedMessageArray(index, message);
+        var row = $("<tr/>");
 
-        // add the message type as a class to this row
-        $(row).addClass(messageArray[1].toLowerCase());
+        $.each(messageArray, function(index, column){
+            var cell = $("<td>" + column + "</td>");
+
+            if (index == 1) {
+                // add the message type as a class to this cell
+                cell.addClass(contextualClassForType(messageArray[1]));
+            }
+
+            row.append(cell);
+        });
+
+        // add the message type as data to this row
+        row.attr("data-message-type", messageArray[1]);
+
+        // append the row to the table
+        $('table tbody').append(row);
+
+        ++tableRows;
     }
 
     // when we get a new log entry, sanitize it and add it to the table
     Developer.newLogLine.connect(function(index, message){
-        if (index >= table.data.length) {
+        if (index >= tableRows) {
             addRowToTable(index, message);
-            table.draw(false);
-
-            // window.scrollTo(0, document.body.scrollHeight);
         }
     });
 
@@ -49,16 +131,14 @@ $(function(){
         addRowToTable(index, message);
     });
 
-    table.columns.adjust().draw();
-
     // change the column filter if the user asks for verbose debug
     $('#verbose-debug-checkbox').change(function(){
         if (this.checked) {
             // show the debug output in the table
-            table.columns(1).search('').draw();
+            $('tr[data-message-type="DEBUG"]').show();
         } else {
             // hide the debug output in the table
-            table.columns(1).search('^(?:(?!DEBUG).)*$', true).draw();
+            $('tr[data-message-type="DEBUG"]').hide();
         }
     });
 
