@@ -47,7 +47,7 @@ tr:first-child th:nth-child(3) {
 
 /* Search styling */
 
-input {
+input[type="search"] {
     float: right;
     color: #7F7F7F;
     font: 16px 'Helvetica','Arial',sans-serif;
