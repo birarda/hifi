@@ -49,7 +49,7 @@ $(function(){
         addRowToTable(index, message);
     });
 
-    table.draw();
+    table.columns.adjust().draw();
 
     // change the column filter if the user asks for verbose debug
     $('#verbose-debug-checkbox').change(function(){
