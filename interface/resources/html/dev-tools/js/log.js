@@ -149,4 +149,9 @@ $(function(){
             }
         });
     });
+
+    // handle reveal of log file on button click
+    $('#reveal-log-btn').click(function(){
+        Developer.revealLogFile();
+    });
 })

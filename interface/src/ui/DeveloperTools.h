@@ -27,6 +27,10 @@ namespace DeveloperTools {
     class ScriptingInterface : public QObject {
         Q_OBJECT
         Q_PROPERTY(QStringList log READ getLogLines)
+
+    public slots:
+        void revealLogFile();
+
     signals:
         void newLogLine(int index, const QString& message);
 

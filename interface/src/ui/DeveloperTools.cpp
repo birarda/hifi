@@ -15,6 +15,8 @@
 
 #include <PathUtils.h>
 
+#include "../Application.h"
+
 using namespace DeveloperTools;
 
 // currently because it's the only view available the developer tools window goes right to the log
@@ -43,6 +45,13 @@ void ScriptingInterface::handleLogLine(QtMsgType type, const QString& message) {
 
     // emit our signal to say that a new log line has been added
     emit newLogLine(_logLines.size() - 1, message);
+}
+
+void ScriptingInterface::revealLogFile() {
+    auto logger = qApp->getLogger();
+    if (logger) {
+        logger->locateLog();
+    }
 }
 
 WindowManager& WindowManager::getInstance() {
