@@ -416,11 +416,11 @@ void AudioClient::start() {
     _desiredOutputFormat.setChannelCount(2);
 
     QAudioDeviceInfo inputDeviceInfo = defaultAudioDeviceForMode(QAudio::AudioInput);
-    qCInfo(audioclient) << "The default audio input device is" << inputDeviceInfo.deviceName();
+    qCDebug(audioclient) << "The default audio input device is" << inputDeviceInfo.deviceName();
     bool inputFormatSupported = switchInputToAudioDevice(inputDeviceInfo);
 
     QAudioDeviceInfo outputDeviceInfo = defaultAudioDeviceForMode(QAudio::AudioOutput);
-    qCInfo(audioclient) << "The default audio output device is" << outputDeviceInfo.deviceName();
+    qCDebug(audioclient) << "The default audio output device is" << outputDeviceInfo.deviceName();
     bool outputFormatSupported = switchOutputToAudioDevice(outputDeviceInfo);
 
     if (!inputFormatSupported) {
@@ -968,7 +968,7 @@ bool AudioClient::switchInputToAudioDevice(const QAudioDeviceInfo& inputDeviceIn
         _inputAudioDeviceName = inputDeviceInfo.deviceName().trimmed();
 
         if (adjustedFormatForAudioDevice(inputDeviceInfo, _desiredInputFormat, _inputFormat)) {
-            qCInfo(audioclient) << "The format to be used for audio input is" << _inputFormat;
+            qCDebug(audioclient) << "The format to be used for audio input is" << _inputFormat;
 
             // we've got the best we can get for input
             // if required, setup a resampler for this input to our desired network format
