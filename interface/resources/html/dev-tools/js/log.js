@@ -87,6 +87,12 @@ $(function(){
         }
     }
 
+    var FILTERED_CLASS = "filtered"
+    var HIDDEN_DEBUG_CLASS = "hidden-debug"
+
+    var filter = "";
+    var hideDebug = true;
+
     function addRowToTable(index, message) {
         var messageArray = sanitizedMessageArray(index, message);
         var row = $("<tr/>");
@@ -104,6 +110,16 @@ $(function(){
 
         // add the message type as data to this row
         row.attr("data-message-type", messageArray[1]);
+
+        // check if this row should be filtered immediately
+        if (row.text().toLowerCase().indexOf(filter) == -1) {
+            row.addClass(FILTERED_CLASS);
+        }
+
+        // check if this is debug that should be filtered immediately
+        if (hideDebug && messageArray[1] == "DEBUG") {
+            row.addClass(HIDDEN_DEBUG_CLASS);
+        }
 
         // append the row to the table
         $('table tbody').append(row);
@@ -124,28 +140,30 @@ $(function(){
     });
 
     // change the column filter if the user asks for verbose debug
-    $('#verbose-debug-checkbox').change(function(){
+    $('#hide-debug-checkbox').change(function(){
         if (this.checked) {
             // hide the debug output in the table
-            $('tr[data-message-type="DEBUG"]').addClass('hidden-debug');
+            hideDebug = true;
+            $('tr[data-message-type="DEBUG"]').addClass(HIDDEN_DEBUG_CLASS);
         } else {
             // show the debug output in the table
-            $('tr[data-message-type="DEBUG"]').removeClass('hidden-debug');
+            hideDebug = false;
+            $('tr[data-message-type="DEBUG"]').removeClass(HIDDEN_DEBUG_CLASS);
         }
     });
 
     // fire the change event on the verbose debug checkbox to start with the right value
-    $('#verbose-debug-checkbox').change();
+    $('#hide -debug-checkbox').change();
 
     // handle filtering of table rows on input change
-    $('#filter-search').on('input', function(){
-        var filter = $(this).val().toLowerCase();
+    $('#search-input').on('input', function(){
+        filter = $(this).val().toLowerCase();
         $('tbody tr').each(function(){
             // decide to hide or show the row if it matches the filter
             if (filter && $(this).text().toLowerCase().indexOf(filter) == -1) {
-                $(this).addClass('filtered');
+                $(this).addClass(FILTERED_CLASS);
             } else {
-                $(this).removeClass('filtered');
+                $(this).removeClass(FILTERED_CLASS);
             }
         });
     });

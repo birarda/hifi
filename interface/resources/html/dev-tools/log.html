@@ -13,18 +13,18 @@
         <script type="text/javascript" src="js/log.js"></script>
     </head>
     <body>
-        <div class="container-fluid">
-            <div class="well">
-                <div class="input-group">
-                    <input type="text" id="filter-search" class="form-control" placeholder="Search">
+        <div id="log-container" class="container-fluid">
+            <div class="well" id="option-well">
+                <div class="input-group" id="search-group">
+                    <input type="text" id="search-input" class="form-control" placeholder="Search">
                 </div>
                 <button type="button" id="reveal-log-btn" class="btn btn-default" data-color="primary">Reveal Log File</button>
                 <span class="button-checkbox">
                     <button type="button" class="btn" data-color="primary">Hide Debug</button>
-                    <input type="checkbox" id="verbose-debug-checkbox" class="hidden" checked="checked" />
+                    <input type="checkbox" id="hide-debug-checkbox" class="hidden" checked="checked" />
                 </span>
             </div>
-            
+
             <table class="table table-hover table-condensed table-bordered" id="log">
                 <thead>
                     <th>Time</th>

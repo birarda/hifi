@@ -1,9 +1,15 @@
+#log-container {
+    min-width: 520px;
+    margin-top: 10px;
+}
+
 table tbody td:nth-child(3) {
     word-break: break-all;
 }
 
-#filter-search {
+#search-group {
     float: right;
+    width: 40%;
 }
 
 .filtered {
