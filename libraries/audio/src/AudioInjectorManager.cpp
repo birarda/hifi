@@ -146,7 +146,7 @@ bool AudioInjectorManager::threadInjector(AudioInjector* injector) {
         return true;
     } else {
         // unable to thread this injector, at the max
-        qDebug() << "AudioInjectorManager::threadInjector could not thread AudioInjector - at max of"
+        qInfo() << "AudioInjectorManager::threadInjector could not thread AudioInjector - at max of"
             << MAX_INJECTORS_PER_THREAD << "current audio injectors.";
         return false;
     }
