@@ -1,5 +1,6 @@
 $(function(){
 
+    // jQuery Checkbox Buttons by travislaynewilson - http://bootsnipp.com/snippets/featured/jquery-checkbox-buttons
     $('.button-checkbox').each(function () {
         // Settings
         var $widget = $(this),
@@ -56,8 +57,6 @@ $(function(){
         init();
     });
 
-    var tableRows = 0;
-
     function sanitizedMessageArray(index, message) {
         // pull out the time from the log entry
         var timeStart = message.indexOf('[') + 1;
@@ -90,8 +89,10 @@ $(function(){
     var FILTERED_CLASS = "filtered"
     var HIDDEN_DEBUG_CLASS = "hidden-debug"
 
+    var tableRows = 0;
     var filter = "";
     var hideDebug = true;
+    var stickToBottom = false;
 
     function addRowToTable(index, message) {
         var messageArray = sanitizedMessageArray(index, message);
@@ -131,6 +132,11 @@ $(function(){
     Developer.newLogLine.connect(function(index, message){
         if (index >= tableRows) {
             addRowToTable(index, message);
+
+            if (stickToBottom) {
+                // we're in stick to bottom mode, jump to bottom of window
+                $(window).scrollTop($(document).height());
+            }
         }
     });
 
@@ -171,5 +177,15 @@ $(function(){
     // handle reveal of log file on button click
     $('#reveal-log-btn').click(function(){
         Developer.revealLogFile();
+    });
+
+    $(window).scroll(function() {
+        if ($(window).scrollTop() + $(window).height() == $(document).height()) {
+            // user has hit the bottom, stick the scroll to incoming log entries
+            stickToBottom = true;
+        } else {
+            // user scrolled off the bottom, don't force log to stick to bottom
+            stickToBottom = false;
+        }
     });
 })
