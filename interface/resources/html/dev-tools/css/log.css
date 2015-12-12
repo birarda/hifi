@@ -1,6 +1,21 @@
+#fixed-bar {
+    position: fixed;
+    top: 0;
+    width: 100%;
+    background-color: white;
+}
+
+#option-well {
+    margin: 15px 15px;
+}
+
 #log-container {
     min-width: 520px;
-    margin-top: 10px;
+    margin-top: 20px;
+}
+
+table {
+    margin-top: 85px;
 }
 
 table tbody td:nth-child(3) {
