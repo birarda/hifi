@@ -4588,7 +4588,7 @@ void Application::domainSettingsReceived(const QJsonObject& domainSettingsObject
         voxelWalletUUID = QUuid(voxelObject[VOXEL_WALLET_UUID].toString());
     }
 
-    qCInfo(interfaceapp) << "Octree edits costs are" << satoshisPerVoxel << "per octree cell and" << satoshisPerMeterCubed << "per meter cubed";
+    qCDebug(interfaceapp) << "Octree edits costs are" << satoshisPerVoxel << "per octree cell and" << satoshisPerMeterCubed << "per meter cubed";
     qCDebug(interfaceapp) << "Destination wallet UUID for edit payments is" << voxelWalletUUID;
 }
 
