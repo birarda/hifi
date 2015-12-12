@@ -304,7 +304,7 @@ void AddressManager::goToAddressFromObject(const QVariantMap& dataObject, const 
                         if (shouldFaceViewpoint) {
                             // try to parse this returned path as a viewpoint, that's the only thing it could be for now
                             if (!handleViewpoint(returnedPath, shouldFaceViewpoint)) {
-                                qCDebug(networking) << "Received a location path that was could not be handled as a viewpoint -"
+                                qCInfo(networking) << "Received a location path that was could not be handled as a viewpoint -"
                                     << returnedPath;
                             }
                         } else {
@@ -321,7 +321,7 @@ void AddressManager::goToAddressFromObject(const QVariantMap& dataObject, const 
                 }
 
             } else {
-                qCDebug(networking) << "Received an address manager API response with no domain key. Cannot parse.";
+                qCInfo(networking) << "Received an address manager API response with no domain key. Cannot parse.";
                 qCDebug(networking) << locationMap;
             }
         } else {
@@ -329,13 +329,13 @@ void AddressManager::goToAddressFromObject(const QVariantMap& dataObject, const 
             emit lookupResultIsOffline();
         }
     } else {
-        qCDebug(networking) << "Received an address manager API response with no location key or place key. Cannot parse.";
+        qCInfo(networking) << "Received an address manager API response with no location key or place key. Cannot parse.";
         qCDebug(networking) << locationMap;
     }
 }
 
 void AddressManager::handleAPIError(QNetworkReply& errorReply) {
-    qCDebug(networking) << "AddressManager API error -" << errorReply.error() << "-" << errorReply.errorString();
+    qCInfo(networking) << "AddressManager API error -" << errorReply.error() << "-" << errorReply.errorString();
 
     if (errorReply.error() == QNetworkReply::ContentNotFoundError) {
         emit lookupResultIsNotFound();
