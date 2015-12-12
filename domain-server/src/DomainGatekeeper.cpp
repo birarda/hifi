@@ -17,6 +17,7 @@
 
 #include <AccountManager.h>
 #include <Assignment.h>
+#include <NetworkLogging.h>
 
 #include "DomainServer.h"
 #include "DomainServerNodeData.h"
