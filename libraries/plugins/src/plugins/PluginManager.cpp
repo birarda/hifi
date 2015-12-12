@@ -36,13 +36,13 @@ const LoaderList& getLoadedPlugins() {
         QDir pluginDir(pluginPath);
         pluginDir.setFilter(QDir::Files);
         if (pluginDir.exists()) {
-            qDebug() << "Loading runtime plugins from " << pluginPath;
+            qInfo() << "Loading runtime plugins from " << pluginPath;
             auto candidates = pluginDir.entryList();
             for (auto plugin : candidates) {
-                qDebug() << "Attempting plugins " << plugin;
+                qInfo() << "Attempting plugins " << plugin;
                 QSharedPointer<QPluginLoader> loader(new QPluginLoader(pluginPath + plugin));
                 if (loader->load()) {
-                    qDebug() << "Plugins " << plugin << " success";
+                    qInfo() << "Plugins " << plugin << " success";
                     loadedPlugins.push_back(loader);
                 }
             }

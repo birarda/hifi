@@ -1660,14 +1660,14 @@ void MyAvatar::goToLocation(const glm::vec3& newPosition,
                             bool hasOrientation, const glm::quat& newOrientation,
                             bool shouldFaceLocation) {
 
-    qCDebug(interfaceapp).nospace() << "MyAvatar goToLocation - moving to " << newPosition.x << ", "
+    qCInfo(interfaceapp).nospace() << "MyAvatar goToLocation - moving to " << newPosition.x << ", "
         << newPosition.y << ", " << newPosition.z;
 
     _goToPending = true;
     _goToPosition = newPosition;
     _goToOrientation = getOrientation();
     if (hasOrientation) {
-        qCDebug(interfaceapp).nospace() << "MyAvatar goToLocation - new orientation is "
+        qCInfo(interfaceapp).nospace() << "MyAvatar goToLocation - new orientation is "
                                         << newOrientation.x << ", " << newOrientation.y << ", " << newOrientation.z << ", " << newOrientation.w;
 
         // orient the user to face the target

@@ -416,21 +416,21 @@ void AudioClient::start() {
     _desiredOutputFormat.setChannelCount(2);
 
     QAudioDeviceInfo inputDeviceInfo = defaultAudioDeviceForMode(QAudio::AudioInput);
-    qCDebug(audioclient) << "The default audio input device is" << inputDeviceInfo.deviceName();
+    qCInfo(audioclient) << "The default audio input device is" << inputDeviceInfo.deviceName();
     bool inputFormatSupported = switchInputToAudioDevice(inputDeviceInfo);
 
     QAudioDeviceInfo outputDeviceInfo = defaultAudioDeviceForMode(QAudio::AudioOutput);
-    qCDebug(audioclient) << "The default audio output device is" << outputDeviceInfo.deviceName();
+    qCInfo(audioclient) << "The default audio output device is" << outputDeviceInfo.deviceName();
     bool outputFormatSupported = switchOutputToAudioDevice(outputDeviceInfo);
 
     if (!inputFormatSupported) {
-        qCDebug(audioclient) << "Unable to set up audio input because of a problem with input format.";
-        qCDebug(audioclient) << "The closest format available is" << inputDeviceInfo.nearestFormat(_desiredInputFormat);
+        qCWarning(audioclient) << "Unable to set up audio input because of a problem with input format.";
+        qCWarning(audioclient) << "The closest format available is" << inputDeviceInfo.nearestFormat(_desiredInputFormat);
     }
 
     if (!outputFormatSupported) {
-        qCDebug(audioclient) << "Unable to set up audio output because of a problem with output format.";
-        qCDebug(audioclient) << "The closest format available is" << outputDeviceInfo.nearestFormat(_desiredOutputFormat);
+        qCWarning(audioclient) << "Unable to set up audio output because of a problem with output format.";
+        qCWarning(audioclient) << "The closest format available is" << outputDeviceInfo.nearestFormat(_desiredOutputFormat);
     }
 
     if (_audioInput) {
@@ -964,11 +964,11 @@ bool AudioClient::switchInputToAudioDevice(const QAudioDeviceInfo& inputDeviceIn
     }
 
     if (!inputDeviceInfo.isNull()) {
-        qCDebug(audioclient) << "The audio input device " << inputDeviceInfo.deviceName() << "is available.";
+        qCInfo(audioclient) << "The audio input device " << inputDeviceInfo.deviceName() << "is available.";
         _inputAudioDeviceName = inputDeviceInfo.deviceName().trimmed();
 
         if (adjustedFormatForAudioDevice(inputDeviceInfo, _desiredInputFormat, _inputFormat)) {
-            qCDebug(audioclient) << "The format to be used for audio input is" << _inputFormat;
+            qCInfo(audioclient) << "The format to be used for audio input is" << _inputFormat;
 
             // we've got the best we can get for input
             // if required, setup a resampler for this input to our desired network format
@@ -1002,7 +1002,7 @@ bool AudioClient::switchInputToAudioDevice(const QAudioDeviceInfo& inputDeviceIn
                     connect(_inputDevice, SIGNAL(readyRead()), this, SLOT(handleAudioInput()));
                     supportedFormat = true;
                 } else {
-                    qCDebug(audioclient) << "Error starting audio input -" <<  _audioInput->error();
+                    qCWarning(audioclient) << "Error starting audio input -" <<  _audioInput->error();
                 }
             }
         }
@@ -1067,7 +1067,7 @@ bool AudioClient::switchOutputToAudioDevice(const QAudioDeviceInfo& outputDevice
     }
 
     if (!outputDeviceInfo.isNull()) {
-        qCDebug(audioclient) << "The audio output device " << outputDeviceInfo.deviceName() << "is available.";
+        qCInfo(audioclient) << "The audio output device " << outputDeviceInfo.deviceName() << "is available.";
         _outputAudioDeviceName = outputDeviceInfo.deviceName().trimmed();
 
         if (adjustedFormatForAudioDevice(outputDeviceInfo, _desiredOutputFormat, _outputFormat)) {

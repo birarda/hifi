@@ -239,9 +239,9 @@ void NodeList::sendDomainServerCheckIn() {
     
     if (_publicSockAddr.isNull()) {
         // we don't know our public socket and we need to send it to the domain server
-        qCDebug(networking) << "Waiting for inital public socket from STUN. Will not send domain-server check in.";
+        qCInfo(networking) << "Waiting for inital public socket from STUN. Will not send domain-server check in.";
     } else if (_domainHandler.getIP().isNull() && _domainHandler.requiresICE()) {
-        qCDebug(networking) << "Waiting for ICE discovered domain-server socket. Will not send domain-server check in.";
+        qCInfo(networking) << "Waiting for ICE discovered domain-server socket. Will not send domain-server check in.";
         handleICEConnectionToDomainServer();
     } else if (!_domainHandler.getIP().isNull()) {
         bool isUsingDTLS = false;
@@ -250,7 +250,7 @@ void NodeList::sendDomainServerCheckIn() {
             ? PacketType::DomainConnectRequest : PacketType::DomainListRequest;
 
         if (!_domainHandler.isConnected()) {
-            qCDebug(networking) << "Sending connect request to domain-server at" << _domainHandler.getHostname();
+            qCInfo(networking) << "Sending connect request to domain-server at" << _domainHandler.getHostname();
 
             // is this our localhost domain-server?
             // if so we need to make sure we have an up-to-date local port in case it restarted
@@ -444,7 +444,7 @@ void NodeList::pingPunchForDomainServer() {
         const int NUM_DOMAIN_SERVER_PINGS_BEFORE_RESET = 2000 / UDP_PUNCH_PING_INTERVAL_MS;
 
         if (_domainHandler.getICEPeer().getConnectionAttempts() == 0) {
-            qCDebug(networking) << "Sending ping packets to establish connectivity with domain-server with ID"
+            qCInfo(networking) << "Sending ping packets to establish connectivity with domain-server with ID"
                 << uuidStringWithoutCurlyBraces(_domainHandler.getICEDomainID());
         } else {
             if (_domainHandler.getICEPeer().getConnectionAttempts() % NUM_DOMAIN_SERVER_PINGS_BEFORE_RESET == 0) {
@@ -585,7 +585,7 @@ void NodeList::pingPunchForInactiveNode(const SharedNodePointer& node) {
     const int NUM_DEBUG_CONNECTION_ATTEMPTS = 1000 / (UDP_PUNCH_PING_INTERVAL_MS);
 
     if (node->getConnectionAttempts() > 0 && node->getConnectionAttempts() % NUM_DEBUG_CONNECTION_ATTEMPTS == 0) {
-        qCDebug(networking) << "No response to UDP hole punch pings for node" << node->getUUID() << "in last second.";
+        qCInfo(networking) << "No response to UDP hole punch pings for node" << node->getUUID() << "in last second.";
     }
 
     // send the ping packet to the local and public sockets for this node

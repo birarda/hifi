@@ -146,7 +146,7 @@ void DomainHandler::setHostnameAndPort(const QString& hostname, quint16 port) {
             qCDebug(networking) << "Updated domain hostname to" << _hostname;
 
             // re-set the sock addr to null and fire off a lookup of the IP address for this domain-server's hostname
-            qCDebug(networking, "Looking up DS hostname %s.", _hostname.toLocal8Bit().constData());
+            qCInfo(networking, "Looking up DS hostname %s.", _hostname.toLocal8Bit().constData());
             QHostInfo::lookupHost(_hostname, this, SLOT(completedHostnameLookup(const QHostInfo&)));
 
             DependencyManager::get<NodeList>()->flagTimeForConnectionStep(LimitedNodeList::ConnectionStep::SetDomainHostname);
@@ -190,7 +190,7 @@ void DomainHandler::setIceServerHostnameAndID(const QString& iceServerHostname, 
             completedIceServerHostnameLookup();
         }
 
-        qCDebug(networking) << "ICE required to connect to domain via ice server at" << iceServerHostname;
+        qCInfo(networking) << "ICE required to connect to domain via ice server at" << iceServerHostname;
     }
 }
 
@@ -215,7 +215,7 @@ void DomainHandler::completedHostnameLookup(const QHostInfo& hostInfo) {
 
             DependencyManager::get<NodeList>()->flagTimeForConnectionStep(LimitedNodeList::ConnectionStep::SetDomainSocket);
 
-            qCDebug(networking, "DS at %s is at %s", _hostname.toLocal8Bit().constData(),
+            qCInfo(networking, "DS at %s is at %s", _hostname.toLocal8Bit().constData(),
                    _sockAddr.getAddress().toString().toLocal8Bit().constData());
 
             emit completedSocketDiscovery();
@@ -298,13 +298,13 @@ void DomainHandler::processICEPingReplyPacket(QSharedPointer<ReceivedMessage> me
     if (getIP().isNull()) {
         // for now we're unsafely assuming this came back from the domain
         if (senderSockAddr == _icePeer.getLocalSocket()) {
-            qCDebug(networking) << "Connecting to domain using local socket";
+            qCInfo(networking) << "Connecting to domain using local socket" << senderSockAddr;
             activateICELocalSocket();
         } else if (senderSockAddr == _icePeer.getPublicSocket()) {
-            qCDebug(networking) << "Conecting to domain using public socket";
+            qCInfo(networking) << "Conecting to domain using public socket" << senderSockAddr;
             activateICEPublicSocket();
         } else {
-            qCDebug(networking) << "Reply does not match either local or public socket for domain. Will not connect.";
+            qCInfo(networking) << "Reply does not match either local or public socket for domain. Will not connect.";
         }
     }
 }

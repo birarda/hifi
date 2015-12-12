@@ -132,7 +132,7 @@ const JSONCallbackParameters& AddressManager::apiCallbackParameters() {
 bool AddressManager::handleUrl(const QUrl& lookupUrl, LookupTrigger trigger) {
     if (lookupUrl.scheme() == HIFI_URL_SCHEME) {
 
-        qCDebug(networking) << "Trying to go to URL" << lookupUrl.toString();
+        qCInfo(networking) << "Trying to go to URL" << lookupUrl.toString();
 
         DependencyManager::get<NodeList>()->flagTimeForConnectionStep(LimitedNodeList::ConnectionStep::LookupAddress);
 
@@ -261,13 +261,13 @@ void AddressManager::goToAddressFromObject(const QVariantMap& dataObject, const 
                         ? domainObject[DOMAIN_NETWORK_PORT_KEY].toUInt()
                         : DEFAULT_DOMAIN_SERVER_PORT;
 
-                    qCDebug(networking) << "Possible domain change required to connect to" << domainHostname
+                    qCInfo(networking) << "Possible domain change required to connect to" << domainHostname
                         << "on" << domainPort;
                     emit possibleDomainChangeRequired(domainHostname, domainPort);
                 } else {
                     QString iceServerAddress = domainObject[DOMAIN_ICE_SERVER_ADDRESS_KEY].toString();
 
-                    qCDebug(networking) << "Possible domain change required to connect to domain with ID" << domainID
+                    qCInfo(networking) << "Possible domain change required to connect to domain with ID" << domainID
                         << "via ice-server at" << iceServerAddress;
 
                     emit possibleDomainChangeRequiredViaICEForID(iceServerAddress, domainID);
@@ -559,7 +559,7 @@ void AddressManager::setDomainInfo(const QString& hostname, quint16 port, Lookup
 
     _rootPlaceID = QUuid();
 
-    qCDebug(networking) << "Possible domain change required to connect to domain at" << hostname << "on" << port;
+    qCInfo(networking) << "Possible domain change required to connect to domain at" << hostname << "on" << port;
 
     DependencyManager::get<NodeList>()->flagTimeForConnectionStep(LimitedNodeList::ConnectionStep::HandleAddress);
 

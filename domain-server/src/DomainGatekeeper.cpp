@@ -591,7 +591,7 @@ void DomainGatekeeper::processICEPeerInformationPacket(QSharedPointer<ReceivedMe
         // immediately ping the new peer, and start a timer to continue pinging it until we connect to it
         newPeer->startPingTimer();
         
-        qDebug() << "Sending ping packets to establish connectivity with ICE peer with ID"
+        qCDebug(networking) << "Sending ping packets to establish connectivity with ICE peer with ID"
             << newPeer->getUUID();
         
         pingPunchForConnectingPeer(newPeer);

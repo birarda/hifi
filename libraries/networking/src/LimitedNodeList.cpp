@@ -117,7 +117,7 @@ void LimitedNodeList::setSessionUUID(const QUuid& sessionUUID) {
     _sessionUUID = sessionUUID;
 
     if (sessionUUID != oldUUID) {
-        qCDebug(networking) << "NodeList UUID changed from" <<  uuidStringWithoutCurlyBraces(oldUUID)
+        qCInfo(networking) << "NodeList UUID changed from" <<  uuidStringWithoutCurlyBraces(oldUUID)
         << "to" << uuidStringWithoutCurlyBraces(_sessionUUID);
         emit uuidChanged(sessionUUID, oldUUID);
     }
@@ -496,7 +496,7 @@ void LimitedNodeList::processKillNode(ReceivedMessage& message) {
 }
 
 void LimitedNodeList::handleNodeKill(const SharedNodePointer& node) {
-    qCDebug(networking) << "Killed" << *node;
+    qCInfo(networking) << "Killed" << *node;
     node->stopPingTimer();
     emit nodeKilled(node);
     
@@ -533,7 +533,7 @@ SharedNodePointer LimitedNodeList::addOrUpdateNode(const QUuid& uuid, NodeType_t
 
         _nodeHash.insert(UUIDNodePair(newNode->getUUID(), newNodePointer));
 
-        qCDebug(networking) << "Added" << *newNode;
+        qCInfo(networking) << "Added" << *newNode;
 
         emit nodeAdded(newNodePointer);
         if (newNodePointer->getActiveSocket()) {
@@ -910,7 +910,7 @@ void LimitedNodeList::sendPacketToIceServer(PacketType packetType, const HifiSoc
 
         iceDataStream << peerID;
 
-        qCDebug(networking) << "Sending packet to ICE server to request connection info for peer with ID"
+        qCInfo(networking) << "Sending packet to ICE server to request connection info for peer with ID"
             << uuidStringWithoutCurlyBraces(peerID);
     }
 

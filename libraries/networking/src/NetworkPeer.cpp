@@ -121,21 +121,21 @@ void NetworkPeer::setActiveSocket(HifiSockAddr* discoveredSocket) {
 
 void NetworkPeer::activateLocalSocket() {
     if (_activeSocket != &_localSocket) {
-        qCDebug(networking) << "Activating local socket for network peer with ID" << uuidStringWithoutCurlyBraces(_uuid);
+        qCInfo(networking) << "Activating local socket for network peer with ID" << uuidStringWithoutCurlyBraces(_uuid);
         setActiveSocket(&_localSocket);
     }
 }
 
 void NetworkPeer::activatePublicSocket() {
     if (_activeSocket != &_publicSocket) {
-        qCDebug(networking) << "Activating public socket for network peer with ID" << uuidStringWithoutCurlyBraces(_uuid);
+        qCInfo(networking) << "Activating public socket for network peer with ID" << uuidStringWithoutCurlyBraces(_uuid);
         setActiveSocket(&_publicSocket);
     }
 }
 
 void NetworkPeer::activateSymmetricSocket() {
     if (_activeSocket != &_symmetricSocket) {
-        qCDebug(networking) << "Activating symmetric socket for network peer with ID" << uuidStringWithoutCurlyBraces(_uuid);
+        qCInfo(networking) << "Activating symmetric socket for network peer with ID" << uuidStringWithoutCurlyBraces(_uuid);
         setActiveSocket(&_symmetricSocket);
     }
 }

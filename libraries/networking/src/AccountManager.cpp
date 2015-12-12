@@ -143,7 +143,7 @@ void AccountManager::setAuthURL(const QUrl& authURL) {
                 if (keyURL == _authURL) {
                     // pull out the stored access token and store it in memory
                     _accountInfo = settings.value(key).value<DataServerAccountInfo>();
-                    qCDebug(networking) << "Found a data-server access token for" << qPrintable(keyURL.toString());
+                    qCInfo(networking) << "Found an API access token for" << qPrintable(keyURL.toString());
                     
                     // profile info isn't guaranteed to be saved too
                     if (_accountInfo.hasProfile()) {
