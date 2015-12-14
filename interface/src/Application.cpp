@@ -291,7 +291,7 @@ void messageHandler(QtMsgType type, const QMessageLogContext& context, const QSt
 
     // pass this log line to the DeveloperToolsWindowManager
     auto& devToolsManager = DeveloperTools::WindowManager::getInstance();
-    devToolsManager.handleLogLine(type, logMessage);
+    devToolsManager.handleLogLine(logMessage);
 
     if (!logMessage.isEmpty()) {
 #ifdef Q_OS_WIN

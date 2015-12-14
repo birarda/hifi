@@ -15,24 +15,16 @@
 #define hifi_DeveloperTools_h
 
 #include <QtCore/QPointer>
-#include <QtWebKitWidgets/QWebView>
+#include <QtWebChannel/QWebChannel>
+#include <QtWebEngineWidgets/QWebEngineView>
+#include <QtWebSockets/QWebSocketServer>
+
+#include "WebSocketClientWrapper.h"
 
 namespace DeveloperTools {
-    class Window : public QWebView {
-        Q_OBJECT
-    public:
-        Window();
-<<<<<<< HEAD
-=======
-    private:
-
->>>>>>> pass log to DeveloperTools::Window via script interface
-    };
-
     class ScriptingInterface : public QObject {
         Q_OBJECT
         Q_PROPERTY(QStringList log READ getLogLines)
-<<<<<<< HEAD
 
     public slots:
         void revealLogFile();
@@ -47,13 +39,6 @@ namespace DeveloperTools {
         QStringList _logLines;
 
         friend class WindowManager;
-=======
-    public slots:
-        void handleLogLine(QtMsgType type, const QString& message) { _logLines << message; }
-    private:
-        const QStringList& getLogLines() const { return _logLines; }
-        QStringList _logLines;
->>>>>>> pass log to DeveloperTools::Window via script interface
     };
 
     class WindowManager : public QObject {
@@ -63,18 +48,17 @@ namespace DeveloperTools {
 
     public slots:
         void showWindow();
-<<<<<<< HEAD
         void handleLogLine(const QString& message) { _scriptInterface.handleLogLine(message); }
-=======
-        void handleLogLine(QtMsgType type, const QString& message) { _scriptInterface.handleLogLine(type, message); }
->>>>>>> pass log to DeveloperTools::Window via script interface
-
-    private slots:
-        void addToolsObjectToWindow();
         
     private:
-        QPointer<Window> _window { nullptr };
+        WindowManager();
+        
+        QPointer<QWebEngineView> _window { nullptr };
         ScriptingInterface _scriptInterface;
+
+        QWebSocketServer _server { "Developer Tools Server", QWebSocketServer::NonSecureMode };
+        WebSocketClientWrapper _clientWrapper { &_server }; // wraps WebSocket clients in QWebChannelAbstractTransport objects
+        QWebChannel _channel;
     };
 }
 

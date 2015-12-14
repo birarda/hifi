@@ -15,30 +15,13 @@
 
 #include <PathUtils.h>
 
-<<<<<<< HEAD
 #include "../Application.h"
+#include "WebSocketTransport.h"
 
 using namespace DeveloperTools;
 
 // currently because it's the only view available the developer tools window goes right to the log
 const QString DEV_TOOLS_INDEX_PATH = "html/dev-tools/log.html";
-
-Window::Window() {
-
-#ifndef Q_NO_DEBUG
-    // in debug, allow the web inspector on QWebView
-    QWebSettings::globalSettings()->setAttribute(QWebSettings::DeveloperExtrasEnabled, true);
-#endif
-
-    // set the window title
-    setWindowTitle("Log");
-
-    // delete the dialog on close
-    setAttribute(Qt::WA_DeleteOnClose);
-
-    // set the URL of the window to show the log
-    setUrl(QUrl::fromLocalFile(PathUtils::resourcesPath() + DEV_TOOLS_INDEX_PATH));
-}
 
 void ScriptingInterface::handleLogLine(const QString& message) {
     // add the log line to our in-memory QStringList
@@ -55,54 +38,46 @@ void ScriptingInterface::revealLogFile() {
     }
 }
 
-=======
-using namespace DeveloperTools;
-
->>>>>>> pass log to DeveloperTools::Window via script interface
 WindowManager& WindowManager::getInstance() {
     static WindowManager staticInstance;
     return staticInstance;
 }
 
+WindowManager::WindowManager() {
+    // NOTE: Should we end up using QWebChannel for multiple views, it's likely we should centralize this and just
+    // have all registered objects (behind safe scripting interfaces) exposed to the QWebEngineViews.
+
+    if (!_server.listen(QHostAddress::LocalHost)) {
+        qWarning() << "Failed to open Developer Tools web socket server. Developer Tools will not be available.";
+        return;
+    } else {
+        qDebug().noquote() << "Developer Tools QWebSocketServer listening at" << _server.serverUrl().toString();
+    }
+
+    // setup the QWebChannel
+    connect(&_clientWrapper, &WebSocketClientWrapper::clientConnected, &_channel, &QWebChannel::connectTo);
+
+    // register the scripting interface with the web channel
+    _channel.registerObject("Developer", &_scriptInterface);
+}
+
 void WindowManager::showWindow() {
     if (!_window) {
-        _window = new Window;
+        _window = new QWebEngineView;
 
-        // immediately add the tools object to the window and hook up to have it re-added if the window object is cleared
-        addToolsObjectToWindow();
-        connect(_window->page()->mainFrame(), &QWebFrame::javaScriptWindowObjectCleared,
-                this, &WindowManager::addToolsObjectToWindow);
+        // set the window title
+        _window->setWindowTitle("Log");
+
+        // delete the dialog on close
+        _window->setAttribute(Qt::WA_DeleteOnClose);
+
+        // set the URL of the window to show the log, add a query to pass the url to the web channel server
+        QUrl devToolsURL = QUrl::fromLocalFile(PathUtils::resourcesPath() + DEV_TOOLS_INDEX_PATH);
+        devToolsURL.setQuery("webChannelURL=" + _server.serverUrl().toString());
+
+        _window->setUrl(devToolsURL);
     }
     
     _window->setVisible(true);
 }
 
-void WindowManager::addToolsObjectToWindow() {
-    if (_window) {
-        _window->page()->mainFrame()->addToJavaScriptWindowObject("Developer", &_scriptInterface);
-    }
-}
-
-<<<<<<< HEAD
-
-=======
-// currently because it's the only view available the developer tools window goes right to the log
-const QString DEV_TOOLS_INDEX_PATH = "html/dev-tools/log.html";
-
-Window::Window() {
-
-#ifndef Q_NO_DEBUG
-    // in debug, allow the web inspector on QWebView
-    QWebSettings::globalSettings()->setAttribute(QWebSettings::DeveloperExtrasEnabled, true);
-#endif
-
-    // set the window title
-    setWindowTitle("Log");
-
-    // delete the dialog on close
-    setAttribute(Qt::WA_DeleteOnClose);
-
-    // set the URL of the window to show the log
-    setUrl(QUrl::fromLocalFile(PathUtils::resourcesPath() + DEV_TOOLS_INDEX_PATH));
-}
->>>>>>> pass log to DeveloperTools::Window via script interface

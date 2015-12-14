@@ -20,8 +20,8 @@ find_package(Qt5LinguistTools REQUIRED)
 find_package(Qt5LinguistToolsMacros)
 
 if (WIN32)
-  add_definitions(-D_USE_MATH_DEFINES) # apparently needed to get M_PI and other defines from cmath/math.h		
-  add_definitions(-DWINDOWS_LEAN_AND_MEAN) # needed to make sure windows doesn't go to crazy with its defines		
+  add_definitions(-D_USE_MATH_DEFINES) # apparently needed to get M_PI and other defines from cmath/math.h
+  add_definitions(-DWINDOWS_LEAN_AND_MEAN) # needed to make sure windows doesn't go to crazy with its defines
 endif()
 
 include_application_version()
@@ -45,9 +45,10 @@ else ()
   list(REMOVE_ITEM INTERFACE_SRCS ${SPEECHRECOGNIZER_CPP})
 endif ()
 
-find_package(Qt5 COMPONENTS 
+find_package(Qt5 COMPONENTS
     Gui Multimedia Network OpenGL Qml Quick Script Svg 
-    WebChannel WebEngine WebEngineWidgets WebKitWidgets WebSockets)
+    WebChannel WebEngine WebEngineWidgets WebKitWidgets WebSockets
+)
 
 # grab the ui files in resources/ui
 file (GLOB_RECURSE QT_UI_FILES ui/*.ui)
@@ -69,19 +70,19 @@ if (APPLE)
 
   set(MACOSX_BUNDLE_BUNDLE_NAME Interface)
   set(MACOSX_BUNDLE_GUI_IDENTIFIER io.highfidelity.Interface)
-  
+
   if (UPPER_CMAKE_BUILD_TYPE MATCHES RELEASE OR UPPER_CMAKE_BUILD_TYPE MATCHES RELWITHDEBINFO)
     set(ICON_FILENAME "interface.icns")
   else ()
     set(ICON_FILENAME "interface-beta.icns")
   endif ()
-  
+
   # set how the icon shows up in the Info.plist file
   SET(MACOSX_BUNDLE_ICON_FILE "${ICON_FILENAME}")
 
   # set where in the bundle to put the resources file
   SET_SOURCE_FILES_PROPERTIES(${CMAKE_CURRENT_SOURCE_DIR}/icon/${ICON_FILENAME} PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
-  
+
   set(DISCOVERED_RESOURCES "")
 
   # use the add_resources_to_os_x_bundle macro to recurse into resources
@@ -89,7 +90,7 @@ if (APPLE)
 
   # append the discovered resources to our list of interface sources
   list(APPEND INTERFACE_SRCS ${DISCOVERED_RESOURCES})
-  
+
   set(INTERFACE_SRCS ${INTERFACE_SRCS} "${CMAKE_CURRENT_SOURCE_DIR}/icon/${ICON_FILENAME}")
 endif()
 
@@ -102,7 +103,7 @@ else()
   add_executable(${TARGET_NAME} ${INTERFACE_SRCS} ${QM})
 endif()
 
-# These are external plugins, but we need to do the 'add dependency' here so that their 
+# These are external plugins, but we need to do the 'add dependency' here so that their
 # binary directories get added to the fixup path
 add_dependency_external_projects(sixense)
 add_dependency_external_projects(sdl2)
@@ -121,9 +122,9 @@ if (WIN32)
 endif()
 
 # link required hifi libraries
-link_hifi_libraries(shared octree environment gpu gl procedural model render 
-                    recording fbx networking model-networking entities avatars 
-                    audio audio-client animation script-engine physics 
+link_hifi_libraries(shared octree environment gpu gl procedural model render
+                    recording fbx networking model-networking entities avatars
+                    audio audio-client animation script-engine physics
                     render-utils entities-renderer ui auto-updater
                     controllers plugins display-plugins input-plugins )
 
@@ -138,34 +139,34 @@ endif()
 
 # perform standard include and linking for found externals
 foreach(EXTERNAL ${OPTIONAL_EXTERNALS})
-  
+
   if (${${EXTERNAL}_UPPERCASE}_REQUIRED)
     find_package(${EXTERNAL} REQUIRED)
   else ()
     find_package(${EXTERNAL})
   endif ()
-  
+
   if (${${EXTERNAL}_UPPERCASE}_FOUND AND NOT DISABLE_${${EXTERNAL}_UPPERCASE})
     add_definitions(-DHAVE_${${EXTERNAL}_UPPERCASE})
-    
+
     # include the library directories (ignoring warnings)
     if (NOT ${${EXTERNAL}_UPPERCASE}_INCLUDE_DIRS)
       set(${${EXTERNAL}_UPPERCASE}_INCLUDE_DIRS ${${${EXTERNAL}_UPPERCASE}_INCLUDE_DIR})
     endif ()
-    
+
     include_directories(SYSTEM ${${${EXTERNAL}_UPPERCASE}_INCLUDE_DIRS})
-    
+
     # perform the system include hack for OS X to ignore warnings
     if (APPLE)
       foreach(EXTERNAL_INCLUDE_DIR  ${${${EXTERNAL}_UPPERCASE}_INCLUDE_DIRS})
         SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -isystem ${EXTERNAL_INCLUDE_DIR}")
       endforeach()
     endif ()
-    
+
     if (NOT ${${EXTERNAL}_UPPERCASE}_LIBRARIES)
       set(${${EXTERNAL}_UPPERCASE}_LIBRARIES ${${${EXTERNAL}_UPPERCASE}_LIBRARY})
     endif ()
-    
+
     if (NOT APPLE OR NOT ${${EXTERNAL}_UPPERCASE} MATCHES "SIXENSE")
       target_link_libraries(${TARGET_NAME} ${${${EXTERNAL}_UPPERCASE}_LIBRARIES})
     elseif (APPLE AND NOT INSTALLER_BUILD)
@@ -184,8 +185,8 @@ target_link_libraries(
   Qt5::WebChannel Qt5::WebEngine Qt5::WebEngineWidgets Qt5::WebKitWidgets
 )
 
-# Issue causes build failure unless we add this directory.  
-# See https://bugreports.qt.io/browse/QTBUG-43351  
+# Issue causes build failure unless we add this directory.
+# See https://bugreports.qt.io/browse/QTBUG-43351
 if (WIN32)
     add_paths_to_fixup_libs(${Qt5_DIR}/../../../plugins/qtwebengine)
 endif()
@@ -199,7 +200,7 @@ if (APPLE)
   find_library(AppKit AppKit)
 
   target_link_libraries(${TARGET_NAME} ${OpenGL} ${AppKit})
-    
+
   # install command for OS X bundle
   INSTALL(TARGETS ${TARGET_NAME}
     BUNDLE DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/install" COMPONENT Runtime
