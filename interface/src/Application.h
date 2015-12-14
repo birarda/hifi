@@ -387,6 +387,7 @@ private:
     void dropEvent(QDropEvent* event);
     void dragEnterEvent(QDragEnterEvent* event);
     
+    std::unique_ptr<FileLogger> _logger;
 
     bool _dependencyManagerIsSetup;
 
@@ -459,8 +460,6 @@ private:
     NodeToOctreeSceneStats _octreeServerSceneStats;
     ControllerScriptingInterface* _controllerScriptingInterface{ nullptr };
     QPointer<SnapshotShareDialog> _snapshotShareDialog;
-
-    std::unique_ptr<FileLogger> _logger;
 
     TouchEvent _lastTouchEvent;
 
