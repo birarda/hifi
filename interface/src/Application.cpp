@@ -444,7 +444,8 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer) :
     installNativeEventFilter(&MyNativeEventFilter::getInstance());
 #endif
 
-    _logger = new FileLogger(this);  // After setting organization name in order to get correct directory    
+    // FileLogger setup is done after setting organization name in order to get correct directory
+    _logger = std::unique_ptr<FileLogger> { new FileLogger(this) };
 
     QFontDatabase::addApplicationFont(PathUtils::resourcesPath() + "styles/Inconsolata.otf");
     _window->setWindowTitle("Interface");

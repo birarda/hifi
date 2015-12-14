@@ -186,7 +186,7 @@ public:
     DisplayPlugin* getActiveDisplayPlugin();
     const DisplayPlugin* getActiveDisplayPlugin() const;
 
-    FileLogger* getLogger() { return _logger; }
+    FileLogger* getLogger() { return _logger.get(); }
 
     glm::vec2 getViewportDimensions() const;
 
@@ -460,7 +460,7 @@ private:
     ControllerScriptingInterface* _controllerScriptingInterface{ nullptr };
     QPointer<SnapshotShareDialog> _snapshotShareDialog;
 
-    FileLogger* _logger;
+    std::unique_ptr<FileLogger> _logger;
 
     TouchEvent _lastTouchEvent;
 
@@ -477,7 +477,7 @@ private:
     QThread _settingsThread;
     QTimer _settingsTimer;
     
-    GLCanvas* _glWidget{ nullptr };
+    GLCanvas* _glWidget { nullptr };
     
     typedef bool (Application::* AcceptURLMethod)(const QString &);
     static const QHash<QString, AcceptURLMethod> _acceptedExtensions;
