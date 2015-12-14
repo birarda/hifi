@@ -43,25 +43,12 @@ WindowManager& WindowManager::getInstance() {
     return staticInstance;
 }
 
-WindowManager::WindowManager() {
-    // NOTE: Should we end up using QWebChannel for multiple views, it's likely we should centralize this and just
-    // have all registered objects (behind safe scripting interfaces) exposed to the QWebEngineViews.
-
-    if (!_server.listen(QHostAddress::LocalHost)) {
-        qWarning() << "Failed to open Developer Tools web socket server. Developer Tools will not be available.";
-        return;
-    } else {
-        qDebug().noquote() << "Developer Tools QWebSocketServer listening at" << _server.serverUrl().toString();
+void WindowManager::showWindow() {
+    // is the web socket server ready to go?
+    if (!_server.isListening()) {
+        setupWebSocketServer();
     }
 
-    // setup the QWebChannel
-    connect(&_clientWrapper, &WebSocketClientWrapper::clientConnected, &_channel, &QWebChannel::connectTo);
-
-    // register the scripting interface with the web channel
-    _channel.registerObject("developer", &_scriptInterface);
-}
-
-void WindowManager::showWindow() {
     if (!_window) {
         _window = new QWebEngineView;
 
@@ -78,6 +65,23 @@ void WindowManager::showWindow() {
         _window->setUrl(devToolsURL);
     }
     
-    _window->setVisible(true);
+    _window->show();
+}
+
+void WindowManager::setupWebSocketServer() {
+    // NOTE: Should we end up using QWebChannel for multiple views, it's likely we should centralize this and just
+    // have all registered objects (behind safe scripting interfaces) exposed to the QWebEngineViews.
+
+    if (!_server.listen(QHostAddress::LocalHost)) {
+        qWarning() << "Failed to open Developer Tools web socket server. Developer Tools will not be available.";
+    } else {
+        qDebug() << "Developer Tools QWebSocketServer listening at" << _server.serverUrl().toString();
+
+        // setup the QWebChannel
+        connect(&_clientWrapper, &WebSocketClientWrapper::clientConnected, &_channel, &QWebChannel::connectTo);
+
+        // register the scripting interface with the web channel
+        _channel.registerObject("developer", &_scriptInterface);
+    }
 }
 

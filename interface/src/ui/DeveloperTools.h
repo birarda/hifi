@@ -51,8 +51,8 @@ namespace DeveloperTools {
         void handleLogLine(const QString& message) { _scriptInterface.handleLogLine(message); }
         
     private:
-        WindowManager();
-        
+        void setupWebSocketServer();
+
         QPointer<QWebEngineView> _window { nullptr };
         ScriptingInterface _scriptInterface;
 
