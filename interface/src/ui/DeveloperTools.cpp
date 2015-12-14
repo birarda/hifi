@@ -39,7 +39,7 @@ Window::Window() {
     setUrl(QUrl::fromLocalFile(PathUtils::resourcesPath() + DEV_TOOLS_INDEX_PATH));
 }
 
-void ScriptingInterface::handleLogLine(QtMsgType type, const QString& message) {
+void ScriptingInterface::handleLogLine(const QString& message) {
     // add the log line to our in-memory QStringList
     _logLines << message;
 

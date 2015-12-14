@@ -51,6 +51,8 @@ public:
 
     const QString& addRepeatedMessageRegex(const QString& regexString);
     const QString& addOnlyOnceMessageRegex(const QString& regexString);
+signals:
+    void printedMessage(const QString& message);
 private:
     LogHandler();
 

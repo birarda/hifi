@@ -35,7 +35,7 @@ namespace DeveloperTools {
         void newLogLine(int index, const QString& message);
 
     private:
-        void handleLogLine(QtMsgType type, const QString& message);
+        void handleLogLine(const QString& message);
 
         const QStringList& getLogLines() const { return _logLines; }
         QStringList _logLines;
@@ -50,7 +50,7 @@ namespace DeveloperTools {
 
     public slots:
         void showWindow();
-        void handleLogLine(QtMsgType type, const QString& message) { _scriptInterface.handleLogLine(type, message); }
+        void handleLogLine(const QString& message) { _scriptInterface.handleLogLine(message); }
 
     private slots:
         void addToolsObjectToWindow();

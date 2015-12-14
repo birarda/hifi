@@ -152,6 +152,8 @@ QString LogHandler::printMessage(LogMsgType type, const QMessageLogContext& cont
     QString logMessage = QString("%1 %2").arg(prefixString, message.split("\n").join("\n" + prefixString + " "));
     fprintf(stdout, "%s\n", qPrintable(logMessage));
 
+    emit printedMessage(logMessage);
+
     return logMessage;
 }
 

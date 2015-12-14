@@ -286,21 +286,7 @@ public:
 };
 
 void messageHandler(QtMsgType type, const QMessageLogContext& context, const QString& message) {
-    QString logMessage = LogHandler::getInstance().printMessage((LogMsgType) type, context, message);
-
-    if (!logMessage.isEmpty()) {
-        // pass this log line to the DeveloperToolsWindowManager
-        auto& devToolsManager = DeveloperTools::WindowManager::getInstance();
-        devToolsManager.handleLogLine(type, logMessage);
-
-#ifdef Q_OS_WIN
-        OutputDebugStringA(logMessage.toLocal8Bit().constData());
-        OutputDebugStringA("\n");
-#endif 
-        if (qApp && qApp->getLogger()) {
-             qApp->getLogger()->addMessage(qPrintable(logMessage + "\n"));
-        }
-    }
+    LogHandler::getInstance().printMessage((LogMsgType) type, context, message);
 }
 
 bool setupEssentials(int& argc, char** argv) {
@@ -446,6 +432,22 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer) :
 
     // FileLogger setup is done after setting organization name in order to get correct directory
     _logger = std::unique_ptr<FileLogger> { new FileLogger(this) };
+
+    // connect the LogHandler printedMessage signal so we can do extra log handling
+    auto& logHandler = LogHandler::getInstance();
+    connect(&logHandler, &LogHandler::printedMessage, this, [this](const QString& message) {
+        // pass this log line to the DeveloperToolsWindowManager
+        auto& devToolsManager = DeveloperTools::WindowManager::getInstance();
+        devToolsManager.handleLogLine(message);
+
+#ifdef Q_OS_WIN
+        OutputDebugStringA(logMessage.toLocal8Bit().constData());
+        OutputDebugStringA("\n");
+#endif
+        if (_logger) {
+            _logger->addMessage(qPrintable(message + "\n"));
+        }
+    });
 
     QFontDatabase::addApplicationFont(PathUtils::resourcesPath() + "styles/Inconsolata.otf");
     _window->setWindowTitle("Interface");
