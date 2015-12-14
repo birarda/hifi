@@ -1,62 +1,4 @@
 $(function(){
-
-    // jQuery Checkbox Buttons by travislaynewilson - http://bootsnipp.com/snippets/featured/jquery-checkbox-buttons
-    $('.button-checkbox').each(function () {
-        // Settings
-        var $widget = $(this),
-            $button = $widget.find('button'),
-            $checkbox = $widget.find('input:checkbox'),
-            color = $button.data('color'),
-            settings = {
-                on: {
-                    icon: 'glyphicon glyphicon-check'
-                },
-                off: {
-                    icon: 'glyphicon glyphicon-unchecked'
-                }
-            };
-
-        // Event Handlers
-        $button.on('click', function() {
-            $checkbox.prop('checked', !$checkbox.is(':checked'));
-            $checkbox.triggerHandler('change');
-            updateDisplay();
-        });
-        $checkbox.on('change', function() {
-            updateDisplay();
-        });
-
-        // Actions
-        function updateDisplay() {
-            var isChecked = $checkbox.is(':checked');
-
-            // Set the button's state
-            $button.data('state', (isChecked) ? "on" : "off");
-
-            // Set the button's icon
-            $button.find('.state-icon').removeClass().addClass('state-icon ' + settings[$button.data('state')].icon);
-
-            // Update the button's color
-            if (isChecked) {
-                $button.removeClass('btn-default').addClass('btn-' + color + ' active');
-            } else {
-                $button.removeClass('btn-' + color + ' active').addClass('btn-default');
-            }
-        }
-
-        // Initialization
-        function init() {
-            updateDisplay();
-
-            // Inject the icon if applicable
-            if ($button.find('.state-icon').length == 0) {
-                $button.prepend('<i class="state-icon ' + settings[$button.data('state')].icon + '"></i> ');
-            }
-        }
-
-        init();
-    });
-
     function sanitizedMessageArray(index, message) {
         // pull out the time from the log entry
         var timeStart = message.indexOf('[') + 1;
@@ -128,22 +70,44 @@ $(function(){
         ++tableRows;
     }
 
-    // when we get a new log entry, sanitize it and add it to the table
-    Developer.newLogLine.connect(function(index, message){
-        if (index >= tableRows) {
-            addRowToTable(index, message);
+    // connect to the web channel that we set up on the C++ side
+    var baseUrl = (/[?&]webChannelBaseURL=([A-Za-z0-9\-:/\.]+)/.exec(location.search)[1]);
+    console.log("Connecting to WebSocket server at " + baseUrl + ".");
+    var socket = new WebSocket(baseUrl);
 
-            if (stickToBottom) {
-                // we're in stick to bottom mode, jump to bottom of window
-                $(window).scrollTop($(document).height());
-            }
+    socket.onclose = function() {
+        console.error("WebSocket closed");
+    };
+    socket.onerror = function(error) {
+        console.error("WebSocket error: " + error);
+    };
+
+    socket.onopen = function() {
+        output("WebSocket connected, setting up QWebChannel.");
+        new QWebChannel(socket, function(channel) {
+            // when we get a new log entry, sanitize it and add it to the table
+            channel.developer.newLogLine.connect(function(index, message){
+                if (index >= tableRows) {
+                    addRowToTable(index, message);
+
+                    if (stickToBottom) {
+                        // we're in stick to bottom mode, jump to bottom of window
+                        $(window).scrollTop($(document).height());
+                    }
+                }
+            });
+
+            // enumerate the current log entries and set them up for DataTables
+            $.each(channel.developer.log, function(index, message) {
+                addRowToTable(index, message);
+            });
+
+            // handle reveal of log file on button click
+            $('#reveal-log-btn').click(function(){
+                channel.developer.revealLogFile();
+            });
         }
-    });
-
-    // enumerate the current log entries and set them up for DataTables
-    $.each(Developer.log, function(index, message) {
-        addRowToTable(index, message);
-    });
+    }
 
     // change the column filter if the user asks for verbose debug
     $('#hide-debug-checkbox').change(function(){
@@ -172,11 +136,6 @@ $(function(){
                 $(this).removeClass(FILTERED_CLASS);
             }
         });
-    });
-
-    // handle reveal of log file on button click
-    $('#reveal-log-btn').click(function(){
-        Developer.revealLogFile();
     });
 
     $(window).scroll(function() {

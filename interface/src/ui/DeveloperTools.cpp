@@ -58,7 +58,7 @@ WindowManager::WindowManager() {
     connect(&_clientWrapper, &WebSocketClientWrapper::clientConnected, &_channel, &QWebChannel::connectTo);
 
     // register the scripting interface with the web channel
-    _channel.registerObject("Developer", &_scriptInterface);
+    _channel.registerObject("developer", &_scriptInterface);
 }
 
 void WindowManager::showWindow() {
