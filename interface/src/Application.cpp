@@ -288,11 +288,11 @@ public:
 void messageHandler(QtMsgType type, const QMessageLogContext& context, const QString& message) {
     QString logMessage = LogHandler::getInstance().printMessage((LogMsgType) type, context, message);
 
-    // pass this log line to the DeveloperToolsWindowManager
-    auto& devToolsManager = DeveloperTools::WindowManager::getInstance();
-    devToolsManager.handleLogLine(type, logMessage);
-
     if (!logMessage.isEmpty()) {
+        // pass this log line to the DeveloperToolsWindowManager
+        auto& devToolsManager = DeveloperTools::WindowManager::getInstance();
+        devToolsManager.handleLogLine(type, logMessage);
+
 #ifdef Q_OS_WIN
         OutputDebugStringA(logMessage.toLocal8Bit().constData());
         OutputDebugStringA("\n");
