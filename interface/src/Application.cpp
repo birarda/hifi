@@ -441,7 +441,7 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer) :
         devToolsManager.handleLogLine(message);
 
 #ifdef Q_OS_WIN
-        OutputDebugStringA(logMessage.toLocal8Bit().constData());
+        OutputDebugStringA(message.toLocal8Bit().constData());
         OutputDebugStringA("\n");
 #endif
         if (_logger) {
