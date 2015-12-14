@@ -9,6 +9,7 @@
 #include <gl/Config.h>
 #include <gl/OglplusHelpers.h>
 #include <gl/GLHelpers.h>
+
 #include <memory>
 
 #include <QtCore/QFile>
@@ -35,12 +36,14 @@
 
 #include <GLMHelpers.h>
 #include <gl/OffscreenGLCanvas.h>
+
 #include <OffscreenUi.h>
 #include <PathUtils.h>
 #include <PathUtils.h>
 #include <MessageDialog.h>
 #include <VrMenu.h>
 #include <InfoView.h>
+
 #include <QmlWebWindowClass.h>
 #include <RegisteredMetaTypes.h>
 
@@ -85,7 +88,6 @@ const QString& getTestQmlDir() {
     }
     return dir;
 }
-
 
 class RateCounter {
     std::vector<float> times;
@@ -416,7 +418,6 @@ ScriptEngine* loadScript(const QString& scriptFilename) {
 OffscreenGLCanvas* _chromiumShareContext { nullptr };
 Q_GUI_EXPORT void qt_gl_set_global_share_context(QOpenGLContext *context);
 
-
 // Create a simple OpenGL window that renders text in various ways
 class QTestWindow : public QWindow {
     Q_OBJECT
@@ -487,7 +488,6 @@ public:
 
             makeCurrent();
         }
-
 
         auto primaryScreen = QGuiApplication::primaryScreen();
         auto targetScreen = primaryScreen;

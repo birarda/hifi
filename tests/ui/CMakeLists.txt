@@ -8,8 +8,8 @@ set_target_properties(${TARGET_NAME} PROPERTIES FOLDER "Tests/manual-tests/")
 
 if (WIN32)
   target_link_libraries(${TARGET_NAME} wsock32.lib opengl32.lib Winmm.lib)
-  # Issue causes build failure unless we add this directory.  
-  # See https://bugreports.qt.io/browse/QTBUG-43351  
+  # Issue causes build failure unless we add this directory.
+  # See https://bugreports.qt.io/browse/QTBUG-43351
   add_paths_to_fixup_libs(${Qt5_DIR}/../../../plugins/qtwebengine)
 endif()
 
