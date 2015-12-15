@@ -71,7 +71,7 @@ $(function(){
     }
 
     // connect to the web channel that we set up on the C++ side
-    var baseUrl = (/[?&]webChannelBaseURL=([A-Za-z0-9\-:/\.]+)/.exec(location.search)[1]);
+    var baseUrl = (/[?&]webChannelURL=([A-Za-z0-9\-:/\.]+)/.exec(location.search)[1]);
     console.log("Connecting to WebSocket server at " + baseUrl + ".");
     var socket = new WebSocket(baseUrl);
 
