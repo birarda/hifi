@@ -14,13 +14,13 @@
 #include <QSettings>
 #include <QTranslator>
 
-#include <QtWebEngine/QtWebEngine>
-
 #include <SharedUtil.h>
 
 #include "AddressManager.h"
 #include "Application.h"
 #include "InterfaceLogging.h"
+
+#include <QtWebEngine/QtWebEngine>
 
 #ifdef Q_OS_WIN
 static BOOL CALLBACK enumWindowsCallback(HWND hWnd, LPARAM lParam) {
