@@ -14,6 +14,8 @@
 #include <QSettings>
 #include <QTranslator>
 
+#include <QtWebEngine/QtWebEngine>
+
 #include <SharedUtil.h>
 
 #include "AddressManager.h"
@@ -101,6 +103,7 @@ int main(int argc, const char* argv[]) {
     {
         QSettings::setDefaultFormat(QSettings::IniFormat);
         Application app(argc, const_cast<char**>(argv), startupTime);
+        QtWebEngine::initialize();
 
         QTranslator translator;
         translator.load("i18n/interface_en");

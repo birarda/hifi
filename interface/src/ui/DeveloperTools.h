@@ -45,13 +45,18 @@ namespace DeveloperTools {
         Q_OBJECT
     public:
         static WindowManager& getInstance();
-
+        void setWindowParent(QWidget* parent) { _parent = parent; }
     public slots:
         void showWindow();
         void handleLogLine(const QString& message) { _scriptInterface.handleLogLine(message); }
         
     private:
+        WindowManager() {};
+        Q_DISABLE_COPY(WindowManager);
+
         void setupWebSocketServer();
+
+        QWidget* _parent { nullptr };
 
         QPointer<QWebEngineView> _window { nullptr };
         ScriptingInterface _scriptInterface;

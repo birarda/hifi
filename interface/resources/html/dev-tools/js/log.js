@@ -83,10 +83,10 @@ $(function(){
     };
 
     socket.onopen = function() {
-        output("WebSocket connected, setting up QWebChannel.");
+        console.log("WebSocket connected, setting up QWebChannel.");
         new QWebChannel(socket, function(channel) {
             // when we get a new log entry, sanitize it and add it to the table
-            channel.developer.newLogLine.connect(function(index, message){
+            channel.objects.developer.newLogLine.connect(function(index, message){
                 if (index >= tableRows) {
                     addRowToTable(index, message);
 
@@ -98,16 +98,16 @@ $(function(){
             });
 
             // enumerate the current log entries and set them up for DataTables
-            $.each(channel.developer.log, function(index, message) {
+            $.each(channel.objects.developer.log, function(index, message) {
                 addRowToTable(index, message);
             });
 
             // handle reveal of log file on button click
             $('#reveal-log-btn').click(function(){
-                channel.developer.revealLogFile();
+                channel.objects.developer.revealLogFile();
             });
-        }
-    }
+        });
+    };
 
     // change the column filter if the user asks for verbose debug
     $('#hide-debug-checkbox').change(function(){
@@ -147,4 +147,4 @@ $(function(){
             stickToBottom = false;
         }
     });
-})
+});

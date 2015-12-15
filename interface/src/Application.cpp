@@ -450,6 +450,7 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer) :
 
     // connect the LogHandler printedMessage signal so we can do extra log handling
     auto& logHandler = LogHandler::getInstance();
+
     connect(&logHandler, &LogHandler::printedMessage, this, [this](const QString& message) {
         // pass this log line to the DeveloperToolsWindowManager
         auto& devToolsManager = DeveloperTools::WindowManager::getInstance();
@@ -673,6 +674,9 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer) :
     _glWidget = new GLCanvas();
     _window->setCentralWidget(_glWidget);
 
+    auto& devToolsManager = DeveloperTools::WindowManager::getInstance();
+    devToolsManager.setWindowParent(_glWidget);
+
     _window->restoreGeometry();
     _window->setVisible(true);
 
@@ -692,11 +696,6 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer) :
     _glWidget->setMouseTracking(true);
     _glWidget->makeCurrent();
     _glWidget->initializeGL();
-
-    _chromiumShareContext = new OffscreenGLCanvas();
-    _chromiumShareContext->create(_glWidget->context()->contextHandle());
-    _chromiumShareContext->makeCurrent();
-    qt_gl_set_global_share_context(_chromiumShareContext->getContext());
 
     _offscreenContext = new OffscreenGLCanvas();
     _offscreenContext->create(_glWidget->context()->contextHandle());
