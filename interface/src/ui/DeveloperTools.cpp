@@ -62,6 +62,8 @@ void WindowManager::showWindow() {
         QUrl devToolsURL = QUrl::fromLocalFile(PathUtils::resourcesPath() + DEV_TOOLS_INDEX_PATH);
         devToolsURL.setQuery("webChannelURL=" + _server.serverUrl().toString());
 
+        qDebug().noquote() << "Opening the Developer Tools QWebEngineView at" << devToolsURL.toString();
+
         _window->setUrl(devToolsURL);
     }
     
