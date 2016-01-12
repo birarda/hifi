@@ -1,6 +1,3 @@
-
-if (FALSE)
-
 set(TARGET_NAME "ui-test")
 
 # This is not a testcase -- just set it up as a regular hifi project
