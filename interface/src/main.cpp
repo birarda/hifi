@@ -20,8 +20,6 @@
 #include "Application.h"
 #include "InterfaceLogging.h"
 
-#include <QtWebEngine/QtWebEngine>
-
 #ifdef Q_OS_WIN
 static BOOL CALLBACK enumWindowsCallback(HWND hWnd, LPARAM lParam) {
     const UINT TIMEOUT = 200;  // ms
@@ -103,7 +101,6 @@ int main(int argc, const char* argv[]) {
     {
         QSettings::setDefaultFormat(QSettings::IniFormat);
         Application app(argc, const_cast<char**>(argv), startupTime);
-        QtWebEngine::initialize();
 
         QTranslator translator;
         translator.load("i18n/interface_en");
