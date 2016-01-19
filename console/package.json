@@ -9,7 +9,7 @@
   ],
   "devDependencies": {
     "electron-compilers": "^1.0.1",
-    "electron-packager": "^5.1.1",
+    "electron-packager": "^5.2.1",
     "electron-prebuilt": "0.35.4"
   },
   "repository": {
@@ -18,12 +18,16 @@
   },
   "main": "src/main.js",
   "scripts": {
-    "start": "electron . --local-debug-builds --debug",
-    "local-release": "electron . --local-release-builds --debug",
+    "start": "electron . --binary-type local-debug --debug",
+    "local-release": "electron . --binary-type local-release --debug",
     "packager": "node packager.js"
   },
   "dependencies": {
     "extend": "^3.0.0",
-    "yargs": "^3.30.0"
+    "yargs": "^3.30.0",
+    "request": "2.67.0",
+    "request-progress": "1.0.2",
+    "always-tail": "0.2.0",
+    "unzip": "0.1.11"
   }
 }

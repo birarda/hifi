@@ -12,7 +12,7 @@
 #include <QCommandLineParser>
 #include <QThread>
 
-#include <ApplicationVersion.h>
+#include <BuildInfo.h>
 #include <LogHandler.h>
 #include <SharedUtil.h>
 #include <HifiConfigVariantMap.h>
@@ -44,10 +44,10 @@ AssignmentClientApp::AssignmentClientApp(int argc, char* argv[]) :
     ShutdownEventListener::getInstance();
 #   endif
 
-    setOrganizationName("High Fidelity");
+    setOrganizationName(BuildInfo::MODIFIED_ORGANIZATION);
     setOrganizationDomain("highfidelity.io");
     setApplicationName("assignment-client");
-    setApplicationName(BUILD_VERSION);
+//    setApplicationName(BuildInfo::VERSION);
 
     // use the verbose message handler in Logging
     qInstallMessageHandler(LogHandler::verboseMessageHandler);
@@ -94,6 +94,9 @@ AssignmentClientApp::AssignmentClientApp(int argc, char* argv[]) :
     const QCommandLineOption monitorPortOption(ASSIGNMENT_CLIENT_MONITOR_PORT_OPTION, "assignment-client monitor port", "port");
     parser.addOption(monitorPortOption);
 
+    const QCommandLineOption httpStatusPortOption(ASSIGNMENT_HTTP_STATUS_PORT, "http status server port", "http-status-port");
+    parser.addOption(httpStatusPortOption);
+
     const QCommandLineOption logDirectoryOption(ASSIGNMENT_LOG_DIRECTORY, "directory to store logs", "log-directory");
     parser.addOption(logDirectoryOption);
 
@@ -133,6 +136,11 @@ AssignmentClientApp::AssignmentClientApp(int argc, char* argv[]) :
     if (!numForks && minForks) {
         // if the user specified --min but not -n, set -n to --min
         numForks = minForks;
+    }
+
+    quint16 httpStatusPort { 0 };
+    if (parser.isSet(httpStatusPortOption)) {
+        httpStatusPort = parser.value(httpStatusPortOption).toUShort();
     }
 
     QDir logDirectory { "." };
@@ -212,7 +220,7 @@ AssignmentClientApp::AssignmentClientApp(int argc, char* argv[]) :
         AssignmentClientMonitor* monitor =  new AssignmentClientMonitor(numForks, minForks, maxForks,
                                                                         requestAssignmentType, assignmentPool,
                                                                         listenPort, walletUUID, assignmentServerHostname,
-                                                                        assignmentServerPort, logDirectory);
+                                                                        assignmentServerPort, httpStatusPort, logDirectory);
         monitor->setParent(this);
         connect(this, &QCoreApplication::aboutToQuit, monitor, &AssignmentClientMonitor::aboutToQuit);
     } else {
