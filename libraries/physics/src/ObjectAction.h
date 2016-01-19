@@ -40,8 +40,8 @@ public:
     virtual void updateActionWorker(float deltaTimeStep) = 0;
 
     // these are from btActionInterface
-    virtual void updateAction(btCollisionWorld* collisionWorld, btScalar deltaTimeStep);
-    virtual void debugDraw(btIDebugDraw* debugDrawer);
+    virtual void updateAction(btCollisionWorld* collisionWorld, btScalar deltaTimeStep) override;
+    virtual void debugDraw(btIDebugDraw* debugDrawer) override;
 
     virtual QByteArray serialize() const override = 0;
     virtual void deserialize(QByteArray serializedArguments) override = 0;
@@ -62,7 +62,7 @@ protected:
     virtual void setLinearVelocity(glm::vec3 linearVelocity) override;
     virtual glm::vec3 getAngularVelocity() override;
     virtual void setAngularVelocity(glm::vec3 angularVelocity) override;
-    virtual void activateBody();
+    virtual void activateBody(bool forceActivation = false);
     virtual void forceBodyNonStatic();
 
     EntityItemWeakPointer _ownerEntity;
