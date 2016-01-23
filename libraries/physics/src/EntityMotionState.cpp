@@ -80,9 +80,9 @@ EntityMotionState::~EntityMotionState() {
     _entity = nullptr;
 }
 
-void EntityMotionState::updateServerPhysicsVariables(const QUuid& sessionID) {
+void EntityMotionState::updateServerPhysicsVariables() {
     assert(entityTreeIsLocked());
-    if (_entity->getSimulatorID() == sessionID) {
+    if (_entity->getSimulatorID() == Physics::getSessionUUID()) {
         // don't slam these values if we are the simulation owner
         return;
     }
@@ -96,10 +96,10 @@ void EntityMotionState::updateServerPhysicsVariables(const QUuid& sessionID) {
 }
 
 // virtual
-bool EntityMotionState::handleEasyChanges(uint32_t& flags, PhysicsEngine* engine) {
+bool EntityMotionState::handleEasyChanges(uint32_t& flags) {
     assert(entityTreeIsLocked());
-    updateServerPhysicsVariables(engine->getSessionID());
-    ObjectMotionState::handleEasyChanges(flags, engine);
+    updateServerPhysicsVariables();
+    ObjectMotionState::handleEasyChanges(flags);
 
     if (flags & Simulation::DIRTY_SIMULATOR_ID) {
         _loopsWithoutOwner = 0;
@@ -113,7 +113,7 @@ bool EntityMotionState::handleEasyChanges(uint32_t& flags, PhysicsEngine* engine
             _outgoingPriority = NO_PRORITY;
         } else  {
             _nextOwnershipBid = usecTimestampNow() + USECS_BETWEEN_OWNERSHIP_BIDS;
-            if (engine->getSessionID() == _entity->getSimulatorID() || _entity->getSimulationPriority() >= _outgoingPriority) {
+            if (Physics::getSessionUUID() == _entity->getSimulatorID() || _entity->getSimulationPriority() >= _outgoingPriority) {
                 // we own the simulation or our priority looses to (or ties with) remote
                 _outgoingPriority = NO_PRORITY;
             }
@@ -135,16 +135,16 @@ bool EntityMotionState::handleEasyChanges(uint32_t& flags, PhysicsEngine* engine
 
 // virtual
 bool EntityMotionState::handleHardAndEasyChanges(uint32_t& flags, PhysicsEngine* engine) {
-    updateServerPhysicsVariables(engine->getSessionID());
+    updateServerPhysicsVariables();
     return ObjectMotionState::handleHardAndEasyChanges(flags, engine);
 }
 
-MotionType EntityMotionState::computeObjectMotionType() const {
+PhysicsMotionType EntityMotionState::computePhysicsMotionType() const {
     if (!_entity) {
         return MOTION_TYPE_STATIC;
     }
     assert(entityTreeIsLocked());
-    if (_entity->getCollisionsWillMove()) {
+    if (_entity->getDynamic()) {
         return MOTION_TYPE_DYNAMIC;
     }
     return (_entity->isMoving() || _entity->hasActions()) ?  MOTION_TYPE_KINEMATIC : MOTION_TYPE_STATIC;
@@ -157,7 +157,7 @@ bool EntityMotionState::isMoving() const {
 
 // This callback is invoked by the physics simulation in two cases:
 // (1) when the RigidBody is first added to the world
-//     (irregardless of MotionType: STATIC, DYNAMIC, or KINEMATIC)
+//     (irregardless of PhysicsMotionType: STATIC, DYNAMIC, or KINEMATIC)
 // (2) at the beginning of each simulation step for KINEMATIC RigidBody's --
 //     it is an opportunity for outside code to update the object's simulation position
 void EntityMotionState::getWorldTransform(btTransform& worldTrans) const {
@@ -523,6 +523,17 @@ uint32_t EntityMotionState::getIncomingDirtyFlags() {
     uint32_t dirtyFlags = 0;
     if (_body && _entity) {
         dirtyFlags = _entity->getDirtyFlags();
+
+        if (dirtyFlags | Simulation::DIRTY_SIMULATOR_ID) {
+            // when SIMULATOR_ID changes we must check for reinterpretation of asymmetric collision mask
+            // bits for the avatar groups (e.g. MY_AVATAR vs OTHER_AVATAR)
+            uint8_t entityCollisionMask = _entity->getCollisionless() ? 0 : _entity->getCollisionMask();
+            if ((bool)(entityCollisionMask & USER_COLLISION_GROUP_MY_AVATAR) !=
+                    (bool)(entityCollisionMask & USER_COLLISION_GROUP_OTHER_AVATAR)) {
+                // bits are asymmetric --> flag for reinsertion in physics simulation
+                dirtyFlags |= Simulation::DIRTY_COLLISION_GROUP;
+            }
+        }
         // we add DIRTY_MOTION_TYPE if the body's motion type disagrees with entity velocity settings
         int bodyFlags = _body->getCollisionFlags();
         bool isMoving = _entity->isMoving();
@@ -597,7 +608,7 @@ glm::vec3 EntityMotionState::getObjectLinearVelocityChange() const {
 }
 
 // virtual
-void EntityMotionState::setMotionType(MotionType motionType) {
+void EntityMotionState::setMotionType(PhysicsMotionType motionType) {
     ObjectMotionState::setMotionType(motionType);
     resetMeasuredBodyAcceleration();
 }
@@ -610,19 +621,9 @@ QString EntityMotionState::getName() const {
 }
 
 // virtual
-int16_t EntityMotionState::computeCollisionGroup() const {
-    if (_entity->getIgnoreForCollisions()) {
-        return COLLISION_GROUP_COLLISIONLESS;
-    }
-    switch (computeObjectMotionType()){
-        case MOTION_TYPE_STATIC:
-            return COLLISION_GROUP_STATIC;
-        case MOTION_TYPE_KINEMATIC:
-            return COLLISION_GROUP_KINEMATIC;
-        default:
-            break;
-    }
-    return COLLISION_GROUP_DEFAULT;
+void EntityMotionState::computeCollisionGroupAndMask(int16_t& group, int16_t& mask) const {
+    assert(_entity);
+    _entity->computeCollisionGroupAndFinalMask(group, mask);
 }
 
 void EntityMotionState::setOutgoingPriority(quint8 priority) {

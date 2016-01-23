@@ -1502,7 +1502,11 @@ PropertiesTool = function(opts) {
     var that = {};
 
     var url = Script.resolvePath('html/entityProperties.html');
-    var webView = new WebWindow('Entity Properties', url, 200, 280, true);
+    var webView = new OverlayWebWindow({
+        title: 'Entity Properties', 
+        source: url, 
+        toolWindow: true
+    });
 
     var visible = false;
 
@@ -1654,29 +1658,6 @@ PropertiesTool = function(opts) {
                             scriptTimestamp: timestamp,
                         });
                     }
-                }
-            } else if (data.action == "centerAtmosphereToZone") {
-                if (selectionManager.hasSelection()) {
-                    selectionManager.saveProperties();
-                    for (var i = 0; i < selectionManager.selections.length; i++) {
-                        var properties = selectionManager.savedProperties[selectionManager.selections[i]];
-                        if (properties.type == "Zone") {
-                            var centerOfZone = properties.boundingBox.center;
-                            var atmosphereCenter = {
-                                x: centerOfZone.x,
-                                y: centerOfZone.y - properties.atmosphere.innerRadius,
-                                z: centerOfZone.z
-                            };
-
-                            Entities.editEntity(selectionManager.selections[i], {
-                                atmosphere: {
-                                    center: atmosphereCenter
-                                },
-                            });
-                        }
-                    }
-                    pushCommandForSelections();
-                    selectionManager._update();
                 }
             }
         }

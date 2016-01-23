@@ -340,11 +340,24 @@ void OffscreenQmlSurface::create(QOpenGLContext* shareContext) {
     _qmlComponent = new QQmlComponent(_qmlEngine);
 }
 
-void OffscreenQmlSurface::resize(const QSize& newSize) {
+void OffscreenQmlSurface::resize(const QSize& newSize_) {
 
     if (!_renderer || !_renderer->_quickWindow) {
         return;
     }
+
+    const float MAX_OFFSCREEN_DIMENSION = 4096;
+    QSize newSize = newSize_;
+
+    if (newSize.width() > MAX_OFFSCREEN_DIMENSION || newSize.height() > MAX_OFFSCREEN_DIMENSION) {
+        float scale = std::min(
+                ((float)newSize.width() / MAX_OFFSCREEN_DIMENSION),
+                ((float)newSize.height() / MAX_OFFSCREEN_DIMENSION));
+        newSize = QSize(
+                std::max(static_cast<int>(scale * newSize.width()), 10),
+                std::max(static_cast<int>(scale * newSize.height()), 10));
+    }
+
 
 
     QSize currentSize = _renderer->_quickWindow->geometry().size();
@@ -615,3 +628,30 @@ QQmlContext* OffscreenQmlSurface::getRootContext() {
     return _qmlEngine->rootContext();
 }
 
+Q_DECLARE_METATYPE(std::function<void()>);
+static auto VoidLambdaType = qRegisterMetaType<std::function<void()>>();
+Q_DECLARE_METATYPE(std::function<QVariant()>);
+static auto VariantLambdaType = qRegisterMetaType<std::function<QVariant()>>();
+
+
+void OffscreenQmlSurface::executeOnUiThread(std::function<void()> function, bool blocking ) {
+    if (QThread::currentThread() != thread()) {
+        QMetaObject::invokeMethod(this, "executeOnUiThread", blocking ? Qt::BlockingQueuedConnection : Qt::QueuedConnection,
+            Q_ARG(std::function<void()>, function));
+        return;
+    }
+
+    function();
+}
+
+QVariant OffscreenQmlSurface::returnFromUiThread(std::function<QVariant()> function) {
+    if (QThread::currentThread() != thread()) {
+        QVariant result;
+        QMetaObject::invokeMethod(this, "returnFromUiThread", Qt::BlockingQueuedConnection,
+            Q_RETURN_ARG(QVariant, result),
+            Q_ARG(std::function<QVariant()>, function));
+        return result;
+    }
+
+    return function();
+}

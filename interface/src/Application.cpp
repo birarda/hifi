@@ -37,6 +37,9 @@
 #include <QtGui/QMouseEvent>
 #include <QtGui/QDesktopServices>
 
+#include <QtNetwork/QLocalSocket>
+#include <QtNetwork/QLocalServer>
+
 #include <QtQml/QQmlContext>
 #include <QtQml/QQmlEngine>
 #include <QtQuick/QQuickWindow>
@@ -59,7 +62,7 @@
 #include <ResourceScriptingInterface.h>
 #include <AccountManager.h>
 #include <AddressManager.h>
-#include <ApplicationVersion.h>
+#include <BuildInfo.h>
 #include <AssetClient.h>
 #include <AssetUpload.h>
 #include <AutoUpdater.h>
@@ -82,7 +85,6 @@
 #include <controllers/StateController.h>
 #include <LogHandler.h>
 #include <MainWindow.h>
-#include <MessageDialog.h>
 #include <MessagesClient.h>
 #include <ModelEntityItem.h>
 #include <NetworkAccessManager.h>
@@ -95,9 +97,11 @@
 #include <PathUtils.h>
 #include <PerfStat.h>
 #include <PhysicsEngine.h>
+#include <PhysicsHelpers.h>
 #include <plugins/PluginContainer.h>
 #include <plugins/PluginManager.h>
 #include <RenderableWebEntityItem.h>
+#include <RenderShadowTask.h>
 #include <RenderDeferredTask.h>
 #include <ResourceCache.h>
 #include <RenderScriptingInterface.h>
@@ -151,7 +155,6 @@
 #endif
 #include "Stars.h"
 #include "ui/AddressBarDialog.h"
-#include "ui/RecorderDialog.h"
 #include "ui/AvatarInputs.h"
 #include "ui/AssetUploadDialogFactory.h"
 #include "ui/DataWebDialog.h"
@@ -316,7 +319,7 @@ bool setupEssentials(int& argc, char** argv) {
     qInstallMessageHandler(messageHandler);
 
     // Set build version
-    QCoreApplication::setApplicationVersion(BUILD_VERSION);
+    QCoreApplication::setApplicationVersion(BuildInfo::VERSION);
 
     Setting::preInit();
 
@@ -407,7 +410,6 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer) :
     QApplication(argc, argv),
     _dependencyManagerIsSetup(setupEssentials(argc, argv)),
     _window(new MainWindow(desktop())),
-    _toolWindow(NULL),
     _undoStackScriptingInterface(&_undoStack),
     _frameCount(0),
     _fps(60.0f),
@@ -434,9 +436,6 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer) :
 
     auto controllerScriptingInterface = DependencyManager::get<controller::ScriptingInterface>().data();
     _controllerScriptingInterface = dynamic_cast<ControllerScriptingInterface*>(controllerScriptingInterface);
-    // to work around the Qt constant wireless scanning, set the env for polling interval very high
-    const QByteArray EXTREME_BEARER_POLL_TIMEOUT = QString::number(INT_MAX).toLocal8Bit();
-    qputenv("QT_BEARER_POLL_TIMEOUT", EXTREME_BEARER_POLL_TIMEOUT);
 
     _entityClipboard->createRootElement();
 
@@ -475,8 +474,6 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer) :
     qCInfo(interfaceapp) << "[VERSION] Build sequence:" << qPrintable(applicationVersion());
 
     _bookmarks = new Bookmarks();  // Before setting up the menu
-
-    _runningScriptsWidget = new RunningScriptsWidget(_window);
 
     // start the nodeThread so its event loop is running
     QThread* nodeThread = new QThread(this);
@@ -703,12 +700,10 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer) :
     initializeGL();
 
     // Start rendering
-    _renderEngine->addTask(make_shared<RenderDeferredTask>());
+    render::CullFunctor cullFunctor = LODManager::shouldRender;
+    _renderEngine->addTask(make_shared<RenderShadowTask>(cullFunctor));
+    _renderEngine->addTask(make_shared<RenderDeferredTask>(cullFunctor));
     _renderEngine->registerScene(_main3DScene);
-
-    _toolWindow = new ToolWindow();
-    _toolWindow->setWindowFlags((_toolWindow->windowFlags() | Qt::WindowStaysOnTopHint) & ~Qt::WindowMinimizeButtonHint);
-    _toolWindow->setWindowTitle("Tools");
 
     _offscreenContext->makeCurrent();
 
@@ -828,7 +823,7 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer) :
             } else if (action == controller::toInt(controller::Action::CYCLE_CAMERA)) {
                 cycleCamera();
             } else if (action == controller::toInt(controller::Action::CONTEXT_MENU)) {
-                VrMenu::toggle(); // show context menu even on non-stereo displays
+                offscreenUi->toggleMenu(_glWidget->mapFromGlobal(QCursor::pos()));
             } else if (action == controller::toInt(controller::Action::RETICLE_X)) {
                 auto oldPos = QCursor::pos();
                 auto newPos = oldPos;
@@ -903,7 +898,12 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer) :
     _settingsTimer.setInterval(SAVE_SETTINGS_INTERVAL);
     _settingsThread.start();
 
-    if (Menu::getInstance()->isOptionChecked(MenuOption::IndependentMode)) {
+    if (Menu::getInstance()->isOptionChecked(MenuOption::FirstPerson)) {
+        getMyAvatar()->setBoomLength(MyAvatar::ZOOM_MIN);  // So that camera doesn't auto-switch to third person.
+    } else if (Menu::getInstance()->isOptionChecked(MenuOption::IndependentMode)) {
+        Menu::getInstance()->setIsOptionChecked(MenuOption::ThirdPerson, true);
+        cameraMenuChanged();
+    } else if (Menu::getInstance()->isOptionChecked(MenuOption::CameraEntityMode)) {
         Menu::getInstance()->setIsOptionChecked(MenuOption::ThirdPerson, true);
         cameraMenuChanged();
     }
@@ -1005,7 +1005,6 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer) :
     });
 
     connect(this, &Application::applicationStateChanged, this, &Application::activeChanged);
-
     qCDebug(interfaceapp, "Startup time: %4.2f seconds.", (double)startupTimer.elapsed() / 1000.0);
 }
 
@@ -1205,11 +1204,8 @@ void Application::initializeGL() {
 
 void Application::initializeUi() {
     AddressBarDialog::registerType();
-    RecorderDialog::registerType();
     ErrorDialog::registerType();
     LoginDialog::registerType();
-    MessageDialog::registerType();
-    VrMenu::registerType();
     Tooltip::registerType();
     UpdateDialog::registerType();
 
@@ -1217,7 +1213,10 @@ void Application::initializeUi() {
     offscreenUi->create(_offscreenContext->getContext());
     offscreenUi->setProxyWindow(_window->windowHandle());
     offscreenUi->setBaseUrl(QUrl::fromLocalFile(PathUtils::resourcesPath() + "/qml/"));
-    offscreenUi->load("Root.qml");
+    // OffscreenUi is a subclass of OffscreenQmlSurface specifically designed to
+    // support the window management and scripting proxies for VR use
+    offscreenUi->createDesktop(QString("hifi/Desktop.qml"));
+    
     // FIXME either expose so that dialogs can set this themselves or
     // do better detection in the offscreen UI of what has focus
     offscreenUi->setNavigationFocused(false);
@@ -1228,6 +1227,9 @@ void Application::initializeUi() {
         qApp->quit();
     });
 
+    // For some reason there is already an "Application" object in the QML context, 
+    // though I can't find it. Hence, "ApplicationInterface"
+    rootContext->setContextProperty("ApplicationInterface", this); 
     rootContext->setContextProperty("AnimationCache", DependencyManager::get<AnimationCache>().data());
     rootContext->setContextProperty("Audio", &AudioScriptingInterface::getInstance());
     rootContext->setContextProperty("Controller", DependencyManager::get<controller::ScriptingInterface>().data());
@@ -1250,8 +1252,6 @@ void Application::initializeUi() {
 #endif
 
     rootContext->setContextProperty("Overlays", &_overlays);
-    rootContext->setContextProperty("Desktop", DependencyManager::get<DesktopScriptingInterface>().data());
-
     rootContext->setContextProperty("Window", DependencyManager::get<WindowScriptingInterface>().data());
     rootContext->setContextProperty("Menu", MenuScriptingInterface::getInstance());
     rootContext->setContextProperty("Stats", Stats::getInstance());
@@ -1273,8 +1273,6 @@ void Application::initializeUi() {
     rootContext->setContextProperty("Render", DependencyManager::get<RenderScriptingInterface>().data());
 
     _glWidget->installEventFilter(offscreenUi.data());
-    VrMenu::load();
-    VrMenu::executeQueuedLambdas();
     offscreenUi->setMouseTranslator([=](const QPointF& pt) {
         QPointF result = pt;
         auto displayPlugin = getActiveDisplayPlugin();
@@ -1620,7 +1618,7 @@ void Application::paintGL() {
         Stats::getInstance()->setRenderDetails(renderArgs._details);
         // Reset the gpu::Context Stages
         // Back to the default framebuffer;
-        gpu::doInBatch(renderArgs._context, [=](gpu::Batch& batch) {
+        gpu::doInBatch(renderArgs._context, [&](gpu::Batch& batch) {
             batch.resetStages();
         });
     }
@@ -1868,14 +1866,6 @@ void Application::keyPressEvent(QKeyEvent* event) {
                 }
                 break;
 
-            case Qt::Key_X:
-                if (isMeta && isShifted) {
-//                    auto offscreenUi = DependencyManager::get<OffscreenUi>();
-//                    offscreenUi->load("TestControllers.qml");
-                    RecorderDialog::toggle();
-                }
-                break;
-
             case Qt::Key_L:
                 if (isShifted && isMeta) {
                     Menu::getInstance()->triggerOption(MenuOption::Log);
@@ -1919,12 +1909,6 @@ void Application::keyPressEvent(QKeyEvent* event) {
                 }
                 break;
             }
-
-            case Qt::Key_A:
-                if (isShifted) {
-                    Menu::getInstance()->triggerOption(MenuOption::Atmosphere);
-                }
-                break;
 
             case Qt::Key_Backslash:
                 Menu::getInstance()->triggerOption(MenuOption::Chat);
@@ -2100,7 +2084,8 @@ void Application::keyPressEvent(QKeyEvent* event) {
 
 void Application::keyReleaseEvent(QKeyEvent* event) {
     if (event->key() == Qt::Key_Alt && _altPressed && hasFocus()) {
-        VrMenu::toggle(); // show context menu even on non-stereo displays
+        auto offscreenUi = DependencyManager::get<OffscreenUi>();
+        offscreenUi->toggleMenu(_glWidget->mapFromGlobal(QCursor::pos()));
     }
 
     _keysPressed.remove(event->key());
@@ -2228,6 +2213,11 @@ void Application::mousePressEvent(QMouseEvent* event, unsigned int deviceID) {
     _altPressed = false;
 
     auto offscreenUi = DependencyManager::get<OffscreenUi>();
+    // If we get a mouse press event it means it wasn't consumed by the offscreen UI,
+    // hence, we should defocus all of the offscreen UI windows, in order to allow
+    // keyboard shortcuts not to be swallowed by them.  In particular, WebEngineViews
+    // will consume all keyboard events.
+    offscreenUi->unfocusWindows();
     QPointF transformedPos = offscreenUi->mapToVirtualScreen(event->localPos(), _glWidget);
     QMouseEvent mappedEvent(event->type(),
         transformedPos,
@@ -2685,6 +2675,8 @@ void Application::loadSettings() {
 
     Menu::getInstance()->loadSettings();
     getMyAvatar()->loadData();
+
+    _settingsLoaded = true;
 }
 
 void Application::saveSettings() {
@@ -2724,8 +2716,6 @@ void Application::initDisplay() {
 void Application::init() {
     // Make sure Login state is up to date
     DependencyManager::get<DialogsManager>()->toggleLoginDialog();
-
-    _environment.init();
 
     DependencyManager::get<DeferredLightingEffect>()->init();
 
@@ -3122,63 +3112,71 @@ void Application::update(float deltaTime) {
 
     if (_physicsEnabled) {
         PerformanceTimer perfTimer("physics");
-
-        static VectorOfMotionStates motionStates;
-        _entitySimulation.getObjectsToRemoveFromPhysics(motionStates);
-        _physicsEngine->removeObjects(motionStates);
-
-        getEntities()->getTree()->withWriteLock([&] {
-            _entitySimulation.getObjectsToAddToPhysics(motionStates);
-            _physicsEngine->addObjects(motionStates);
-
-        });
-        getEntities()->getTree()->withWriteLock([&] {
-            _entitySimulation.getObjectsToChange(motionStates);
-            VectorOfMotionStates stillNeedChange = _physicsEngine->changeObjects(motionStates);
-            _entitySimulation.setObjectsToChange(stillNeedChange);
-        });
-
-        _entitySimulation.applyActionChanges();
-
         AvatarManager* avatarManager = DependencyManager::get<AvatarManager>().data();
-        avatarManager->getObjectsToRemoveFromPhysics(motionStates);
-        _physicsEngine->removeObjects(motionStates);
-        avatarManager->getObjectsToAddToPhysics(motionStates);
-        _physicsEngine->addObjects(motionStates);
-        avatarManager->getObjectsToChange(motionStates);
-        _physicsEngine->changeObjects(motionStates);
 
-        myAvatar->prepareForPhysicsSimulation();
-        _physicsEngine->forEachAction([&](EntityActionPointer action) {
-            action->prepareForPhysicsSimulation();
-        });
+        {
+            PerformanceTimer perfTimer("updateStates)");
+            static VectorOfMotionStates motionStates;
+            _entitySimulation.getObjectsToRemoveFromPhysics(motionStates);
+            _physicsEngine->removeObjects(motionStates);
+            _entitySimulation.deleteObjectsRemovedFromPhysics();
 
-        getEntities()->getTree()->withWriteLock([&] {
-            _physicsEngine->stepSimulation();
-        });
+            getEntities()->getTree()->withReadLock([&] {
+                _entitySimulation.getObjectsToAddToPhysics(motionStates);
+                _physicsEngine->addObjects(motionStates);
 
-        if (_physicsEngine->hasOutgoingChanges()) {
-            getEntities()->getTree()->withWriteLock([&] {
-                _entitySimulation.handleOutgoingChanges(_physicsEngine->getOutgoingChanges(), _physicsEngine->getSessionID());
-                avatarManager->handleOutgoingChanges(_physicsEngine->getOutgoingChanges());
+            });
+            getEntities()->getTree()->withReadLock([&] {
+                _entitySimulation.getObjectsToChange(motionStates);
+                VectorOfMotionStates stillNeedChange = _physicsEngine->changeObjects(motionStates);
+                _entitySimulation.setObjectsToChange(stillNeedChange);
             });
 
-            auto collisionEvents = _physicsEngine->getCollisionEvents();
-            avatarManager->handleCollisionEvents(collisionEvents);
+            _entitySimulation.applyActionChanges();
 
-            _physicsEngine->dumpStatsIfNecessary();
+             avatarManager->getObjectsToRemoveFromPhysics(motionStates);
+            _physicsEngine->removeObjects(motionStates);
+            avatarManager->getObjectsToAddToPhysics(motionStates);
+            _physicsEngine->addObjects(motionStates);
+            avatarManager->getObjectsToChange(motionStates);
+            _physicsEngine->changeObjects(motionStates);
 
-            if (!_aboutToQuit) {
-                PerformanceTimer perfTimer("entities");
-                // Collision events (and their scripts) must not be handled when we're locked, above. (That would risk
-                // deadlock.)
-                _entitySimulation.handleCollisionEvents(collisionEvents);
-                // NOTE: the getEntities()->update() call below will wait for lock
-                // and will simulate entity motion (the EntityTree has been given an EntitySimulation).
-                getEntities()->update(); // update the models...
+            myAvatar->prepareForPhysicsSimulation();
+            _physicsEngine->forEachAction([&](EntityActionPointer action) {
+                action->prepareForPhysicsSimulation();
+            });
+        }
+        {
+            PerformanceTimer perfTimer("stepSimulation");
+            getEntities()->getTree()->withWriteLock([&] {
+                _physicsEngine->stepSimulation();
+            });
+        }
+        {
+            PerformanceTimer perfTimer("havestChanges");
+            if (_physicsEngine->hasOutgoingChanges()) {
+                getEntities()->getTree()->withWriteLock([&] {
+                    _entitySimulation.handleOutgoingChanges(_physicsEngine->getOutgoingChanges(), Physics::getSessionUUID());
+                    avatarManager->handleOutgoingChanges(_physicsEngine->getOutgoingChanges());
+                });
+
+                auto collisionEvents = _physicsEngine->getCollisionEvents();
+                avatarManager->handleCollisionEvents(collisionEvents);
+
+                _physicsEngine->dumpStatsIfNecessary();
+
+                if (!_aboutToQuit) {
+                    PerformanceTimer perfTimer("entities");
+                    // Collision events (and their scripts) must not be handled when we're locked, above. (That would risk
+                    // deadlock.)
+                    _entitySimulation.handleCollisionEvents(collisionEvents);
+                    // NOTE: the getEntities()->update() call below will wait for lock
+                    // and will simulate entity motion (the EntityTree has been given an EntitySimulation).
+                    getEntities()->update(); // update the models...
+                }
+
+                myAvatar->harvestResultsFromPhysicsSimulation(deltaTime);
             }
-
-            myAvatar->harvestResultsFromPhysicsSimulation(deltaTime);
         }
     }
 
@@ -3300,6 +3298,10 @@ int Application::sendNackPackets() {
 }
 
 void Application::queryOctree(NodeType_t serverType, PacketType packetType, NodeToJurisdictionMap& jurisdictions) {
+
+    if (!_settingsLoaded) {
+        return; // bail early if settings are not loaded
+    }
 
     //qCDebug(interfaceapp) << ">>> inside... queryOctree()... _viewFrustum.getFieldOfView()=" << _viewFrustum.getFieldOfView();
     bool wantExtraDebugging = getLogger()->extraDebugging();
@@ -3525,16 +3527,8 @@ glm::vec3 Application::getSunDirection() {
 // FIXME, preprocessor guard this check to occur only in DEBUG builds
 static QThread * activeRenderingThread = nullptr;
 
-float Application::getSizeScale() const {
-    return DependencyManager::get<LODManager>()->getOctreeSizeScale();
-}
-
-int Application::getBoundaryLevelAdjust() const {
-    return DependencyManager::get<LODManager>()->getBoundaryLevelAdjust();
-}
-
 PickRay Application::computePickRay(float x, float y) const {
-    vec2 pickPoint{ x, y };
+    vec2 pickPoint { x, y };
     PickRay result;
     if (isHMDMode()) {
         getApplicationCompositor().computeHmdPickRay(pickPoint, result.origin, result.direction);
@@ -3631,7 +3625,7 @@ namespace render {
             PerformanceTimer perfTimer("worldBox");
 
             auto& batch = *args->_batch;
-            DependencyManager::get<DeferredLightingEffect>()->bindSimpleProgram(batch);
+            DependencyManager::get<GeometryCache>()->bindSimpleProgram(batch);
             renderWorldBox(batch);
         }
     }
@@ -3644,10 +3638,6 @@ public:
     typedef Payload::DataPointer Pointer;
 
     Stars _stars;
-    Environment* _environment;
-
-    BackgroundRenderData(Environment* environment) : _environment(environment) {
-    }
 
     static render::ItemID _item; // unique WorldBoxRenderData
 };
@@ -3655,10 +3645,15 @@ public:
 render::ItemID BackgroundRenderData::_item = 0;
 
 namespace render {
-    template <> const ItemKey payloadGetKey(const BackgroundRenderData::Pointer& stuff) { return ItemKey::Builder::background(); }
-    template <> const Item::Bound payloadGetBound(const BackgroundRenderData::Pointer& stuff) { return Item::Bound(); }
-    template <> void payloadRender(const BackgroundRenderData::Pointer& background, RenderArgs* args) {
+    template <> const ItemKey payloadGetKey(const BackgroundRenderData::Pointer& stuff) {
+        return ItemKey::Builder::background();
+    }
 
+    template <> const Item::Bound payloadGetBound(const BackgroundRenderData::Pointer& stuff) {
+        return Item::Bound();
+    }
+
+    template <> void payloadRender(const BackgroundRenderData::Pointer& background, RenderArgs* args) {
         Q_ASSERT(args->_batch);
         gpu::Batch& batch = *args->_batch;
 
@@ -3666,85 +3661,33 @@ namespace render {
         auto skyStage = DependencyManager::get<SceneScriptingInterface>()->getSkyStage();
         auto backgroundMode = skyStage->getBackgroundMode();
 
-        if (backgroundMode == model::SunSkyStage::NO_BACKGROUND) {
-            // this line intentionally left blank
-        } else {
-            if (backgroundMode == model::SunSkyStage::SKY_BOX) {
+        switch (backgroundMode) {
+            case model::SunSkyStage::SKY_BOX: {
                 auto skybox = skyStage->getSkybox();
                 if (skybox && skybox->getCubemap() && skybox->getCubemap()->isDefined()) {
                     PerformanceTimer perfTimer("skybox");
                     skybox->render(batch, *(args->_viewFrustum));
-                } else {
-                    // If no skybox texture is available, render the SKY_DOME while it loads
-                    backgroundMode = model::SunSkyStage::SKY_DOME;
+                    break;
                 }
+                // If no skybox texture is available, render the SKY_DOME while it loads
             }
-            if (backgroundMode == model::SunSkyStage::SKY_DOME) {
+                // fall through to next case
+            case model::SunSkyStage::SKY_DOME:  {
                 if (Menu::getInstance()->isOptionChecked(MenuOption::Stars)) {
                     PerformanceTimer perfTimer("stars");
                     PerformanceWarning warn(Menu::getInstance()->isOptionChecked(MenuOption::PipelineWarnings),
                         "Application::payloadRender<BackgroundRenderData>() ... stars...");
                     // should be the first rendering pass - w/o depth buffer / lighting
 
-                    // compute starfield alpha based on distance from atmosphere
-                    float alpha = 1.0f;
-                    bool hasStars = true;
-
-                    if (Menu::getInstance()->isOptionChecked(MenuOption::Atmosphere)) {
-                        // TODO: handle this correctly for zones
-                        const EnvironmentData& closestData = background->_environment->getClosestData(args->_viewFrustum->getPosition()); // was theCamera instead of  _viewFrustum
-
-                        if (closestData.getHasStars()) {
-                            const float APPROXIMATE_DISTANCE_FROM_HORIZON = 0.1f;
-                            const float DOUBLE_APPROXIMATE_DISTANCE_FROM_HORIZON = 0.2f;
-
-                            glm::vec3 sunDirection = (args->_viewFrustum->getPosition()/*getAvatarPosition()*/ - closestData.getSunLocation())
-                                                            / closestData.getAtmosphereOuterRadius();
-                            float height = glm::distance(args->_viewFrustum->getPosition()/*theCamera.getPosition()*/, closestData.getAtmosphereCenter());
-                            if (height < closestData.getAtmosphereInnerRadius()) {
-                                // If we're inside the atmosphere, then determine if our keyLight is below the horizon
-                                alpha = 0.0f;
-
-                                if (sunDirection.y > -APPROXIMATE_DISTANCE_FROM_HORIZON) {
-                                    float directionY = glm::clamp(sunDirection.y,
-                                                        -APPROXIMATE_DISTANCE_FROM_HORIZON, APPROXIMATE_DISTANCE_FROM_HORIZON)
-                                                        + APPROXIMATE_DISTANCE_FROM_HORIZON;
-                                    alpha = (directionY / DOUBLE_APPROXIMATE_DISTANCE_FROM_HORIZON);
-                                }
-
-
-                            } else if (height < closestData.getAtmosphereOuterRadius()) {
-                                alpha = (height - closestData.getAtmosphereInnerRadius()) /
-                                    (closestData.getAtmosphereOuterRadius() - closestData.getAtmosphereInnerRadius());
-
-                                if (sunDirection.y > -APPROXIMATE_DISTANCE_FROM_HORIZON) {
-                                    float directionY = glm::clamp(sunDirection.y,
-                                                        -APPROXIMATE_DISTANCE_FROM_HORIZON, APPROXIMATE_DISTANCE_FROM_HORIZON)
-                                                        + APPROXIMATE_DISTANCE_FROM_HORIZON;
-                                    alpha = (directionY / DOUBLE_APPROXIMATE_DISTANCE_FROM_HORIZON);
-                                }
-                            }
-                        } else {
-                            hasStars = false;
-                        }
-                    }
-
-                    // finally render the starfield
-                    if (hasStars) {
-                        background->_stars.render(args, alpha);
-                    }
-
-                    // draw the sky dome
-                    if (/*!selfAvatarOnly &&*/ Menu::getInstance()->isOptionChecked(MenuOption::Atmosphere)) {
-                        PerformanceTimer perfTimer("atmosphere");
-                        PerformanceWarning warn(Menu::getInstance()->isOptionChecked(MenuOption::PipelineWarnings),
-                            "Application::displaySide() ... atmosphere...");
-
-                        background->_environment->renderAtmospheres(batch, *(args->_viewFrustum));
-                    }
-
+                    static const float alpha = 1.0f;
+                    background->_stars.render(args, alpha);
                 }
             }
+                break;
+            case model::SunSkyStage::NO_BACKGROUND:
+            default:
+                // this line intentionally left blank
+                break;
         }
     }
 }
@@ -3777,12 +3720,10 @@ void Application::displaySide(RenderArgs* renderArgs, Camera& theCamera, bool se
 
     // Background rendering decision
     if (BackgroundRenderData::_item == 0) {
-        auto backgroundRenderData = make_shared<BackgroundRenderData>(&_environment);
+        auto backgroundRenderData = make_shared<BackgroundRenderData>();
         auto backgroundRenderPayload = make_shared<BackgroundRenderData::Payload>(backgroundRenderData);
         BackgroundRenderData::_item = _main3DScene->allocateID();
         pendingChanges.resetItem(BackgroundRenderData::_item, backgroundRenderPayload);
-    } else {
-
     }
 
    // Assuming nothing get's rendered through that
@@ -3822,7 +3763,6 @@ void Application::displaySide(RenderArgs* renderArgs, Camera& theCamera, bool se
         DependencyManager::get<DeferredLightingEffect>()->setAmbientLightMode(getRenderAmbientLight());
         auto skyStage = DependencyManager::get<SceneScriptingInterface>()->getSkyStage();
         DependencyManager::get<DeferredLightingEffect>()->setGlobalLight(skyStage->getSunLight()->getDirection(), skyStage->getSunLight()->getColor(), skyStage->getSunLight()->getIntensity(), skyStage->getSunLight()->getAmbientIntensity());
-        DependencyManager::get<DeferredLightingEffect>()->setGlobalAtmosphere(skyStage->getAtmosphere());
 
         auto skybox = model::SkyboxPointer();
         if (skyStage->getBackgroundMode() == model::SunSkyStage::SKY_BOX) {
@@ -3845,14 +3785,14 @@ void Application::displaySide(RenderArgs* renderArgs, Camera& theCamera, bool se
         auto renderInterface = DependencyManager::get<RenderScriptingInterface>();
         auto renderContext = renderInterface->getRenderContext();
 
-        renderArgs->_shouldRender = LODManager::shouldRender;
         renderArgs->_viewFrustum = getDisplayViewFrustum();
         renderContext.setArgs(renderArgs);
 
         bool occlusionStatus = Menu::getInstance()->isOptionChecked(MenuOption::DebugAmbientOcclusion);
+        bool shadowStatus = Menu::getInstance()->isOptionChecked(MenuOption::DebugShadows);
         bool antialiasingStatus = Menu::getInstance()->isOptionChecked(MenuOption::Antialiasing);
         bool showOwnedStatus = Menu::getInstance()->isOptionChecked(MenuOption::PhysicsShowOwned);
-        renderContext.setOptions(occlusionStatus, antialiasingStatus, showOwnedStatus);
+        renderContext.setOptions(occlusionStatus, antialiasingStatus, showOwnedStatus, shadowStatus);
 
         _renderEngine->setRenderContext(renderContext);
 
@@ -3863,6 +3803,8 @@ void Application::displaySide(RenderArgs* renderArgs, Camera& theCamera, bool se
 
         auto engineContext = _renderEngine->getRenderContext();
         renderInterface->setItemCounts(engineContext->getItemsConfig());
+        renderInterface->setJobGPUTimes(engineContext->getAmbientOcclusion().gpuTime);
+
     }
 
     activeRenderingThread = nullptr;
@@ -4315,6 +4257,9 @@ bool Application::acceptURL(const QString& urlString, bool defaultUpload) {
 }
 
 void Application::setSessionUUID(const QUuid& sessionUUID) {
+    // HACK: until we swap the library dependency order between physics and entities
+    // we cache the sessionID in two distinct places for physics.
+    Physics::setSessionUUID(sessionUUID); // TODO: remove this one
     _physicsEngine->setSessionUUID(sessionUUID);
 }
 
@@ -4553,18 +4498,20 @@ bool Application::displayAvatarAttachmentConfirmationDialog(const QString& name)
 }
 
 void Application::toggleRunningScriptsWidget() {
-    if (_runningScriptsWidget->isVisible()) {
-        if (_runningScriptsWidget->hasFocus()) {
-            _runningScriptsWidget->hide();
-        } else {
-            _runningScriptsWidget->raise();
-            setActiveWindow(_runningScriptsWidget);
-            _runningScriptsWidget->setFocus();
-        }
-    } else {
-        _runningScriptsWidget->show();
-        _runningScriptsWidget->setFocus();
-    }
+    static const QUrl url("dialogs/RunningScripts.qml");
+    DependencyManager::get<OffscreenUi>()->show(url, "RunningScripts");
+    //if (_runningScriptsWidget->isVisible()) {
+    //    if (_runningScriptsWidget->hasFocus()) {
+    //        _runningScriptsWidget->hide();
+    //    } else {
+    //        _runningScriptsWidget->raise();
+    //        setActiveWindow(_runningScriptsWidget);
+    //        _runningScriptsWidget->setFocus();
+    //    }
+    //} else {
+    //    _runningScriptsWidget->show();
+    //    _runningScriptsWidget->setFocus();
+    //}
 }
 
 void Application::packageModel() {
@@ -4614,7 +4561,7 @@ void Application::loadDialog() {
     QString fileNameString = QFileDialog::getOpenFileName(
         _glWidget, tr("Open Script"), "", tr("JavaScript Files (*.js)"));
     if (!fileNameString.isEmpty()) {
-        DependencyManager::get<ScriptEngines>()->loadScript(fileNameString);
+        DependencyManager::get<ScriptEngines>()->loadScript(fileNameString, true, false, false, true);  // Don't load from cache
     }
 }
 
@@ -4758,7 +4705,7 @@ void Application::showFriendsWindow() {
     auto webWindowClass = _window->findChildren<WebWindowClass>(FRIENDS_WINDOW_OBJECT_NAME);
     if (webWindowClass.empty()) {
         auto friendsWindow = new WebWindowClass(FRIENDS_WINDOW_TITLE, FRIENDS_WINDOW_URL, FRIENDS_WINDOW_WIDTH,
-                                                FRIENDS_WINDOW_HEIGHT, false);
+                                                FRIENDS_WINDOW_HEIGHT);
         friendsWindow->setParent(_window);
         friendsWindow->setObjectName(FRIENDS_WINDOW_OBJECT_NAME);
         connect(friendsWindow, &WebWindowClass::closed, &WebWindowClass::deleteLater);
@@ -5183,4 +5130,31 @@ void Application::setActiveDisplayPlugin(const QString& pluginName) {
         }
     }
     updateDisplayMode();
+}
+
+void Application::handleLocalServerConnection() {
+    auto server = qobject_cast<QLocalServer*>(sender());
+
+    qDebug() << "Got connection on local server from additional instance - waiting for parameters";
+
+    auto socket = server->nextPendingConnection();
+
+    connect(socket, &QLocalSocket::readyRead, this, &Application::readArgumentsFromLocalSocket);
+
+    qApp->getWindow()->raise();
+    qApp->getWindow()->activateWindow();
+}
+
+void Application::readArgumentsFromLocalSocket() {
+    auto socket = qobject_cast<QLocalSocket*>(sender());
+
+    auto message = socket->readAll();
+    socket->deleteLater();
+
+    qDebug() << "Read from connection: " << message;
+
+    // If we received a message, try to open it as a URL
+    if (message.length() > 0) {
+        qApp->openUrl(QString::fromUtf8(message));
+    }
 }

@@ -61,7 +61,6 @@ ScriptsModel::ScriptsModel(QObject* parent) :
     _localDirectory.setFilter(QDir::Files | QDir::Readable);
     _localDirectory.setNameFilters(QStringList("*.js"));
 
-    auto scriptEngines = DependencyManager::get<ScriptEngines>();
     connect(&_fsWatcher, &QFileSystemWatcher::directoryChanged, this, &ScriptsModel::reloadLocalFiles);
     reloadLocalFiles();
     reloadRemoteFiles();
@@ -100,6 +99,9 @@ QModelIndex ScriptsModel::parent(const QModelIndex& child) const {
 
 QVariant ScriptsModel::data(const QModelIndex& index, int role) const {
     TreeNodeBase* node = getTreeNodeFromIndex(index);
+    if (!node) {
+        return QVariant();
+    }
     if (node->getType() == TREE_NODE_TYPE_SCRIPT) {
         TreeNodeScript* script = static_cast<TreeNodeScript*>(node);
         if (role == Qt::DisplayRole) {

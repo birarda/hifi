@@ -21,6 +21,7 @@
 #include <Octree.h> // for EncodeBitstreamParams class
 #include <OctreeElement.h> // for OctreeElement::AppendState
 #include <OctreePacketData.h>
+#include <PhysicsCollisionGroups.h>
 #include <ShapeInfo.h>
 #include <Transform.h>
 #include <SpatiallyNestable.h>
@@ -270,11 +271,16 @@ public:
     bool isVisible() const { return _visible; }
     bool isInvisible() const { return !_visible; }
 
-    bool getIgnoreForCollisions() const { return _ignoreForCollisions; }
-    void setIgnoreForCollisions(bool value) { _ignoreForCollisions = value; }
+    bool getCollisionless() const { return _collisionless; }
+    void setCollisionless(bool value) { _collisionless = value; }
 
-    bool getCollisionsWillMove() const { return _collisionsWillMove; }
-    void setCollisionsWillMove(bool value) { _collisionsWillMove = value; }
+    uint8_t getCollisionMask() const { return _collisionMask; }
+    void setCollisionMask(uint8_t value) { _collisionMask = value; }
+
+    void computeCollisionGroupAndFinalMask(int16_t& group, int16_t& mask) const;
+
+    bool getDynamic() const { return _dynamic; }
+    void setDynamic(bool value) { _dynamic = value; }
 
     virtual bool shouldBePhysical() const { return false; }
 
@@ -326,8 +332,9 @@ public:
     void updateGravity(const glm::vec3& value);
     void updateAngularVelocity(const glm::vec3& value);
     void updateAngularDamping(float value);
-    void updateIgnoreForCollisions(bool value);
-    void updateCollisionsWillMove(bool value);
+    void updateCollisionless(bool value);
+    void updateCollisionMask(uint8_t value);
+    void updateDynamic(bool value);
     void updateLifetime(float value);
     void updateCreated(uint64_t value);
     virtual void updateShapeType(ShapeType type) { /* do nothing */ }
@@ -364,8 +371,8 @@ public:
     bool clearActions(EntitySimulation* simulation);
     void setActionData(QByteArray actionData);
     const QByteArray getActionData() const;
-    bool hasActions() { return !_objectActions.empty(); }
-    QList<QUuid> getActionIDs() { return _objectActions.keys(); }
+    bool hasActions() const { return !_objectActions.empty(); }
+    QList<QUuid> getActionIDs() const { return _objectActions.keys(); }
     QVariantMap getActionArguments(const QUuid& actionID) const;
     void deserializeActions();
 
@@ -388,6 +395,9 @@ public:
     virtual glm::vec3 getAbsoluteJointTranslationInObjectFrame(int index) const override { return glm::vec3(0.0f); }
     virtual bool setAbsoluteJointRotationInObjectFrame(int index, const glm::quat& rotation) override { return false; }
     virtual bool setAbsoluteJointTranslationInObjectFrame(int index, const glm::vec3& translation) override { return false; }
+
+    virtual int getJointIndex(const QString& name) const { return -1; }
+    virtual QStringList getJointNames() const { return QStringList(); }
 
     virtual void loader() {} // called indirectly when urls for geometry are updated
 
@@ -439,8 +449,9 @@ protected:
     glm::vec3 _angularVelocity;
     float _angularDamping;
     bool _visible;
-    bool _ignoreForCollisions;
-    bool _collisionsWillMove;
+    bool _collisionless;
+    uint8_t _collisionMask { ENTITY_COLLISION_MASK_DEFAULT };
+    bool _dynamic;
     bool _locked;
     QString _userData;
     SimulationOwner _simulationOwner;
