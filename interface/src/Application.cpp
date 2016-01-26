@@ -695,6 +695,11 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer) :
     _glWidget->makeCurrent();
     _glWidget->initializeGL();
 
+    _chromiumShareContext = new OffscreenGLCanvas();
+    _chromiumShareContext->create(_glWidget->context()->contextHandle());
+    _chromiumShareContext->makeCurrent();
+    qt_gl_set_global_share_context(_chromiumShareContext->getContext());
+
     _offscreenContext = new OffscreenGLCanvas();
     _offscreenContext->create(_glWidget->context()->contextHandle());
     _offscreenContext->makeCurrent();
