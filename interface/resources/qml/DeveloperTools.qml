@@ -12,8 +12,6 @@ Windows.Window {
     title: "DeveloperTools"
     resizable: true
     visible: true
-    // Don't destroy on close... otherwise the JS/C++ will have a dangling pointer
-    destroyOnCloseButton: false
     property alias source: webview.url
 
     Controls.WebView {

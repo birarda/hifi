@@ -71,9 +71,8 @@ void WindowManager::showWindow() {
             QQuickItem* item = dynamic_cast<QQuickItem*>(newObject);
             item->setWidth(720);
             item->setHeight(720);
+            item->setProperty("source", devToolsURL.toString());
         });
-
-        offscreenUi->setProperty("source", devToolsURL.toString());
     }
     
 }
