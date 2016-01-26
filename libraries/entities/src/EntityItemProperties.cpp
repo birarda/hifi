@@ -32,22 +32,7 @@ KeyLightPropertyGroup EntityItemProperties::_staticKeyLight;
 EntityPropertyList PROP_LAST_ITEM = (EntityPropertyList)(PROP_AFTER_LAST_ITEM - 1);
 
 EntityItemProperties::EntityItemProperties(EntityPropertyFlags desiredProperties) :
-
-_id(UNKNOWN_ENTITY_ID),
-_idSet(false),
-_lastEdited(0),
-_type(EntityTypes::Unknown),
-
-_glowLevel(0.0f),
-_localRenderAlpha(1.0f),
-
-_glowLevelChanged(false),
-_localRenderAlphaChanged(false),
-
-_defaultSettings(true),
-_naturalDimensions(1.0f, 1.0f, 1.0f),
-_naturalPosition(0.0f, 0.0f, 0.0f),
-_desiredProperties(desiredProperties)
+    _desiredProperties(desiredProperties) //,
 {
 }
 
@@ -185,10 +170,10 @@ void EntityItemProperties::setShapeTypeFromString(const QString& shapeName) {
 }
 
 using BackgroundPair = std::pair<const BackgroundMode, const QString>;
-const std::array<BackgroundPair, BACKGROUND_MODE_ITEM_COUNT> BACKGROUND_MODES = {
+const std::array<BackgroundPair, BACKGROUND_MODE_ITEM_COUNT> BACKGROUND_MODES = { {
     BackgroundPair { BACKGROUND_MODE_INHERIT, { "inherit" } },
     BackgroundPair { BACKGROUND_MODE_SKYBOX, { "skybox" } }
-};
+} };
 
 QString EntityItemProperties::getBackgroundModeAsString() const {
     return BACKGROUND_MODES[_backgroundMode].second;
@@ -320,6 +305,11 @@ EntityPropertyFlags EntityItemProperties::getChangedProperties() const {
 QScriptValue EntityItemProperties::copyToScriptValue(QScriptEngine* engine, bool skipDefaults) const {
     QScriptValue properties = engine->newObject();
     EntityItemProperties defaultEntityProperties;
+
+    if (!_entityFound) {
+        // Return without setting any default property values so that properties are reported in JavaScript as undefined.
+        return properties;
+    }
 
     if (_idSet) {
         COPY_PROPERTY_TO_QSCRIPTVALUE_GETTER_ALWAYS(id, _id.toString());
