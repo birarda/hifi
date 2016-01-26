@@ -158,7 +158,6 @@
 #include "ui/AddressBarDialog.h"
 #include "ui/AvatarInputs.h"
 #include "ui/AssetUploadDialogFactory.h"
-#include "ui/DataWebDialog.h"
 #include "ui/DeveloperTools.h"
 #include "ui/DialogsManager.h"
 #include "ui/LoginDialog.h"
