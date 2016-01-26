@@ -601,10 +601,6 @@ Menu::Menu() {
     // Developer > Crash Application
     addActionToQMenuAndActionHash(developerMenu, MenuOption::CrashInterface, 0, qApp, SLOT(crashApplication()));
 
-    // Developer > Log...
-    addActionToQMenuAndActionHash(developerMenu, MenuOption::Log, Qt::CTRL | Qt::SHIFT | Qt::Key_L,
-         qApp, SLOT(toggleLogDialog()));
-
     // Developer > Stats
     addCheckableActionToQMenuAndActionHash(developerMenu, MenuOption::Stats);
 

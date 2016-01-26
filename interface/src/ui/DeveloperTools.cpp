@@ -14,9 +14,13 @@
 #include <QtWebKitWidgets/QWebFrame>
 
 #include <PathUtils.h>
+#include <OffscreenUi.h>
+
+#include <QQmlContext>
+
+#include <QmlWebTransport.h>
 
 #include "../Application.h"
-#include "WebSocketTransport.h"
 
 using namespace DeveloperTools;
 
@@ -28,7 +32,8 @@ void ScriptingInterface::handleLogLine(const QString& message) {
     _logLines << message;
 
     // emit our signal to say that a new log line has been added
-    emit newLogLine(_logLines.size() - 1, message);
+    QMetaObject::invokeMethod(this, "newLogLine", Qt::QueuedConnection,
+                              Q_ARG(int, _logLines.size() - 1), Q_ARG(QString, message));
 }
 
 void ScriptingInterface::revealLogFile() {
@@ -38,6 +43,10 @@ void ScriptingInterface::revealLogFile() {
     }
 }
 
+Window::Window(QObject* qmlWindow) : QmlWebWindowClass(qmlWindow) {
+
+}
+
 WindowManager& WindowManager::getInstance() {
     static WindowManager staticInstance;
     return staticInstance;
@@ -45,45 +54,50 @@ WindowManager& WindowManager::getInstance() {
 
 void WindowManager::showWindow() {
     // is the web socket server ready to go?
-    if (!_server.isListening()) {
+    if (!_server) {
         setupWebSocketServer();
     }
 
     if (!_window) {
-        _window = new QWebEngineView;
-
-        // set the window title
-        _window->setWindowTitle("Log");
-
-        // delete the dialog on close
-        _window->setAttribute(Qt::WA_DeleteOnClose);
-
         // set the URL of the window to show the log, add a query to pass the url to the web channel server
         QUrl devToolsURL = QUrl::fromLocalFile(PathUtils::resourcesPath() + DEV_TOOLS_INDEX_PATH);
-        devToolsURL.setQuery("webChannelURL=" + _server.serverUrl().toString());
+        devToolsURL.setQuery("webChannelURL=" + _server->serverUrl().toString());
 
         qDebug().noquote() << "Opening the Developer Tools QWebEngineView at" << devToolsURL.toString();
 
-        _window->setUrl(devToolsURL);
+        auto offscreenUi = DependencyManager::get<OffscreenUi>();
+        const QUrl DEVELOPER_TOOLS_QML = QUrl("DeveloperTools.qml");
+        offscreenUi->show(DEVELOPER_TOOLS_QML, "DeveloperTools", [&devToolsURL](QQmlContext* context, QObject* newObject){
+            QQuickItem* item = dynamic_cast<QQuickItem*>(newObject);
+            item->setWidth(720);
+            item->setHeight(720);
+        });
+
+        offscreenUi->setProperty("source", devToolsURL.toString());
     }
     
-    _window->show();
 }
 
 void WindowManager::setupWebSocketServer() {
-    // NOTE: Should we end up using QWebChannel for multiple views, it's likely we should centralize this and just
-    // have all registered objects (behind safe scripting interfaces) exposed to the QWebEngineViews.
+    // NOTE: We may want to avoid using multiple QWebSocketServers for QtWebEngine to C++ bridge, a single server
+    // could accomodate all.
 
-    if (!_server.listen(QHostAddress::LocalHost)) {
-        qWarning() << "Failed to open Developer Tools web socket server. Developer Tools will not be available.";
-    } else {
-        qDebug() << "Developer Tools QWebSocketServer listening at" << _server.serverUrl().toString();
+    if (!_server) {
+        _server = std::unique_ptr<QWebSocketServer> { new QWebSocketServer("Developer Tools Server", QWebSocketServer::NonSecureMode) };
 
-        // setup the QWebChannel
-        connect(&_clientWrapper, &WebSocketClientWrapper::clientConnected, &_channel, &QWebChannel::connectTo);
+        if (!_server->listen(QHostAddress::LocalHost, 0)) {
+            qWarning() << "Failed to open Developer Tools web socket server. Developer Tools will not be available.";
+        } else {
+            qDebug() << "Developer Tools QWebSocketServer listening at" << _server->serverUrl().toString();
 
-        // register the scripting interface with the web channel
-        _channel.registerObject("developer", &_scriptInterface);
+            // setup the QWebChannel when client connects
+            QObject::connect(_server.get(), &QWebSocketServer::newConnection, [this] {
+                _channel.connectTo(new QmlWebTransport(_server->nextPendingConnection()));
+            });
+
+            // register the scripting interface with the web channel
+            _channel.registerObject("developer", &_scriptInterface);
+        }
     }
 }
 

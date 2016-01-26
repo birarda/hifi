@@ -31,8 +31,6 @@ int main(int argc, const char* argv[]) {
 
     bool instanceMightBeRunning = true;
 
-#include <QtWebEngine/QtWebEngine>
-
 #ifdef Q_OS_WIN
     // Try to create a shared memory block - if it can't be created, there is an instance of
     // interface already running. We only do this on Windows for now because of the potential
@@ -107,7 +105,6 @@ int main(int argc, const char* argv[]) {
     {
         QSettings::setDefaultFormat(QSettings::IniFormat);
         Application app(argc, const_cast<char**>(argv), startupTime);
-        QtWebEngine::initialize();
 
         // Setup local server
         QLocalServer server { &app };

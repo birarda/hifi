@@ -21,8 +21,8 @@
 #include <QtWebSockets/QWebSocketServer>
 #include <QtWebSockets/QWebSocket>
 #include <QtWebChannel/QWebChannel>
-#include <QtCore/QJsonDocument>
-#include <QtCore/QJsonObject>
+
+#include "QmlWebTransport.h"
 
 #include "OffscreenUi.h"
 
@@ -45,32 +45,6 @@ void QmlScriptEventBridge::emitScriptEvent(const QString& data) {
     QMetaObject::invokeMethod(this, "scriptEventReceived", Qt::QueuedConnection, 
         Q_ARG(int, _webWindow->getWindowId()), Q_ARG(QString, data));
 }
-
-class QmlWebTransport : public QWebChannelAbstractTransport {
-    Q_OBJECT
-public:
-    QmlWebTransport(QWebSocket* webSocket) : _webSocket(webSocket) {
-        // Translate from the websocket layer to the webchannel layer
-        connect(webSocket, &QWebSocket::textMessageReceived, [this](const QString& message) {
-            QJsonParseError error;
-            QJsonDocument document = QJsonDocument::fromJson(message.toUtf8(), &error);
-            if (error.error || !document.isObject()) {
-                qWarning() << "Unable to parse incoming JSON message" << message;
-                return;
-            }
-            emit messageReceived(document.object(), this);
-        });
-    }
-
-    virtual void sendMessage(const QJsonObject &message) override {
-        // Translate from the webchannel layer to the websocket layer
-        _webSocket->sendTextMessage(QJsonDocument(message).toJson(QJsonDocument::Compact));
-    }
-
-private:
-    QWebSocket* const _webSocket;
-};
-
 
 void QmlWindowClass::setupServer() {
     if (!_webChannelServer) {

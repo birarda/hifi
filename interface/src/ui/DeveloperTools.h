@@ -19,7 +19,7 @@
 #include <QtWebEngineWidgets/QWebEngineView>
 #include <QtWebSockets/QWebSocketServer>
 
-#include "WebSocketClientWrapper.h"
+#include <QmlWebWindowClass.h>
 
 namespace DeveloperTools {
     class ScriptingInterface : public QObject {
@@ -41,6 +41,12 @@ namespace DeveloperTools {
         friend class WindowManager;
     };
 
+    class Window : public QmlWebWindowClass {
+        Q_OBJECT
+    public:
+        Window(QObject* qmlWindow);
+    };
+
     class WindowManager : public QObject {
         Q_OBJECT
     public:
@@ -58,11 +64,10 @@ namespace DeveloperTools {
 
         QWidget* _parent { nullptr };
 
-        QPointer<QWebEngineView> _window { nullptr };
+        QPointer<Window> _window { nullptr };
         ScriptingInterface _scriptInterface;
 
-        QWebSocketServer _server { "Developer Tools Server", QWebSocketServer::NonSecureMode };
-        WebSocketClientWrapper _clientWrapper { &_server }; // wraps WebSocket clients in QWebChannelAbstractTransport objects
+        std::unique_ptr<QWebSocketServer> _server;
         QWebChannel _channel;
     };
 }
