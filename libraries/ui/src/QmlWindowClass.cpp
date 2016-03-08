@@ -217,21 +217,17 @@ QmlWindowClass::QmlWindowClass(QObject* qmlWindow)
     qDebug() << "Created window with ID " << _windowId;
     Q_ASSERT(_qmlWindow);
     Q_ASSERT(dynamic_cast<const QQuickItem*>(_qmlWindow));
+    // Forward messages received from QML on to the script
+    connect(_qmlWindow, SIGNAL(sendToScript(QVariant)), this, SIGNAL(fromQml(const QVariant&)), Qt::QueuedConnection);
+}
+
+void QmlWindowClass::sendToQml(const QVariant& message) {
+    // Forward messages received from the script on to QML
+    QMetaObject::invokeMethod(asQuickItem(), "fromScript", Qt::QueuedConnection, Q_ARG(QVariant, message));
 }
 
 QmlWindowClass::~QmlWindowClass() {
-    if (_qmlWindow) {
-        if (_toolWindow) {
-            auto offscreenUi = DependencyManager::get<OffscreenUi>();
-            auto toolWindow = offscreenUi->getToolWindow();
-            auto invokeResult = QMetaObject::invokeMethod(toolWindow, "removeTabForUrl", Qt::QueuedConnection, 
-                Q_ARG(QVariant, _source));
-            Q_ASSERT(invokeResult);
-        } else {
-            _qmlWindow->deleteLater();
-        }
-        _qmlWindow = nullptr;
-    }
+    close();
 }
 
 void QmlWindowClass::registerObject(const QString& name, QObject* object) {
@@ -331,14 +327,22 @@ void QmlWindowClass::setTitle(const QString& title) {
 }
 
 void QmlWindowClass::close() {
-    DependencyManager::get<OffscreenUi>()->executeOnUiThread([this] {
-        if (_qmlWindow) {
-            _qmlWindow->setProperty("destroyOnInvisible", true);
-            _qmlWindow->setProperty("visible", false);
+    if (_qmlWindow) {
+        if (_toolWindow) {
+            auto offscreenUi = DependencyManager::get<OffscreenUi>();
+            auto qmlWindow = _qmlWindow;
+            offscreenUi->executeOnUiThread([=] {
+                auto toolWindow = offscreenUi->getToolWindow();
+                offscreenUi->getRootContext()->engine()->setObjectOwnership(qmlWindow, QQmlEngine::JavaScriptOwnership);
+                auto invokeResult = QMetaObject::invokeMethod(toolWindow, "removeTabForUrl", Qt::DirectConnection,
+                    Q_ARG(QVariant, _source));
+                Q_ASSERT(invokeResult);
+            });
+        } else {
             _qmlWindow->deleteLater();
-            _qmlWindow = nullptr;
         }
-    });
+        _qmlWindow = nullptr;
+    }
 }
 
 void QmlWindowClass::hasClosed() {

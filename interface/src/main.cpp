@@ -17,6 +17,7 @@
 #include <QSharedMemory>
 #include <QTranslator>
 
+#include <gl/OpenGLVersionChecker.h>
 #include <SharedUtil.h>
 
 #include "AddressManager.h"
@@ -24,8 +25,23 @@
 #include "InterfaceLogging.h"
 #include "MainWindow.h"
 
+#ifdef HAS_BUGSPLAT
+#include <BuildInfo.h>
+#include <BugSplat.h>
+#endif
+
 int main(int argc, const char* argv[]) {
     disableQtBearerPoll(); // Fixes wifi ping spikes
+
+#if HAS_BUGSPLAT
+    // Prevent other threads from hijacking the Exception filter, and allocate 4MB up-front that may be useful in
+    // low-memory scenarios.
+    static const DWORD BUG_SPLAT_FLAGS = MDSF_PREVENTHIJACKING | MDSF_USEGUARDMEMORY;
+    static const char* BUG_SPLAT_DATABASE = "interface_alpha";
+    static const char* BUG_SPLAT_APPLICATION_NAME = "Interface";
+    MiniDmpSender mpSender { BUG_SPLAT_DATABASE, BUG_SPLAT_APPLICATION_NAME, BuildInfo::VERSION.toLatin1().constData(),
+                             nullptr, BUG_SPLAT_FLAGS };
+#endif
     
     QString applicationName = "High Fidelity Interface - " + qgetenv("USERNAME");
 
@@ -83,6 +99,17 @@ int main(int argc, const char* argv[]) {
 #endif
     }
 
+    // Check OpenGL version.
+    // This is done separately from the main Application so that start-up and shut-down logic within the main Application is
+    // not made more complicated than it already is.
+    {
+        OpenGLVersionChecker openGLVersionChecker(argc, const_cast<char**>(argv));
+        if (!openGLVersionChecker.isValidVersion()) {
+            qCDebug(interfaceapp, "Early exit due to OpenGL version.");
+            return 0;
+        }
+    }
+
     QElapsedTimer startupTime;
     startupTime.start();
 
@@ -96,6 +123,7 @@ int main(int argc, const char* argv[]) {
         usecTimestampNowForceClockSkew(clockSkew);
         qCDebug(interfaceapp, "clockSkewOption=%s clockSkew=%d", clockSkewOption, clockSkew);
     }
+
     // Oculus initialization MUST PRECEDE OpenGL context creation.
     // The nature of the Application constructor means this has to be either here,
     // or in the main window ctor, before GL startup.

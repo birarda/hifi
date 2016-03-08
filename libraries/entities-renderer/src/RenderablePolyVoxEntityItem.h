@@ -116,6 +116,8 @@ public:
 
     virtual void rebakeMesh();
 
+    virtual void updateRegistrationPoint(const glm::vec3& value);
+
 private:
     // The PolyVoxEntityItem class has _voxelData which contains dimensions and compressed voxel data.  The dimensions
     // may not match _voxelVolumeSize.
@@ -129,7 +131,7 @@ private:
     NetworkTexturePointer _zTexture;
 
     const int MATERIAL_GPU_SLOT = 3;
-    render::ItemID _myItem;
+    render::ItemID _myItem{ render::Item::INVALID_ITEM_ID };
     static gpu::PipelinePointer _pipeline;
 
     ShapeInfo _shapeInfo;

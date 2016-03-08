@@ -13,85 +13,38 @@
 #define hifi_render_DrawTask_h
 
 #include "Engine.h"
+#include "CullTask.h"
 #include "ShapePipeline.h"
 #include "gpu/Batch.h"
 
 
 namespace render {
 
-using CullFunctor = std::function<bool(const RenderArgs*, const AABox&)>;
-
-void cullItems(const RenderContextPointer& renderContext, const CullFunctor& cullFunctor, RenderDetails::Item& details,
-               const ItemIDsBounds& inItems, ItemIDsBounds& outItems);
-void depthSortItems(const SceneContextPointer& sceneContext, const RenderContextPointer& renderContext, bool frontToBack, const ItemIDsBounds& inItems, ItemIDsBounds& outItems);
-void renderItems(const SceneContextPointer& sceneContext, const RenderContextPointer& renderContext, const ItemIDsBounds& inItems);
-void renderShapes(const SceneContextPointer& sceneContext, const RenderContextPointer& renderContext, const ShapePlumberPointer& shapeContext, const ItemIDsBounds& inItems, int maxDrawnItems = -1);
-
-class FetchItems {
-public:
-    typedef std::function<void (const RenderContextPointer& context, int count)> ProbeNumItems;
-    FetchItems() {}
-    FetchItems(const ProbeNumItems& probe): _probeNumItems(probe) {}
-    FetchItems(const ItemFilter& filter, const ProbeNumItems& probe): _filter(filter), _probeNumItems(probe) {}
-
-    ItemFilter _filter = ItemFilter::Builder::opaqueShape().withoutLayered();
-    ProbeNumItems _probeNumItems;
-
-    void run(const SceneContextPointer& sceneContext, const RenderContextPointer& renderContext, ItemIDsBounds& outItems);
-    using JobModel = Task::Job::ModelO<FetchItems, ItemIDsBounds>;
-};
-
-template<RenderDetails::Type T = RenderDetails::Type::OTHER_ITEM>
-class CullItems {
-public:
-    CullItems(CullFunctor cullFunctor) : _cullFunctor{ cullFunctor } {}
-
-    void run(const SceneContextPointer& sceneContext, const RenderContextPointer& renderContext, const ItemIDsBounds& inItems, ItemIDsBounds& outItems) {
-        const auto& args = renderContext->getArgs();
-        auto& details = args->_details.edit(T);
-        outItems.clear();
-        outItems.reserve(inItems.size());
-        render::cullItems(renderContext, _cullFunctor, details, inItems, outItems);
-    }
-
-    using JobModel = Task::Job::ModelIO<CullItems<T>, ItemIDsBounds, ItemIDsBounds>;
-
-protected:
-    CullFunctor _cullFunctor;
-};
-
-class DepthSortItems {
-public:
-    bool _frontToBack;
-    DepthSortItems(bool frontToBack = true) : _frontToBack(frontToBack) {}
-
-    void run(const SceneContextPointer& sceneContext, const RenderContextPointer& renderContext, const ItemIDsBounds& inItems, ItemIDsBounds& outItems);
-    using JobModel = Task::Job::ModelIO<DepthSortItems, ItemIDsBounds, ItemIDsBounds>;
-};
+void renderItems(const SceneContextPointer& sceneContext, const RenderContextPointer& renderContext, const ItemBounds& inItems);
+void renderShapes(const SceneContextPointer& sceneContext, const RenderContextPointer& renderContext, const ShapePlumberPointer& shapeContext, const ItemBounds& inItems, int maxDrawnItems = -1);
 
 class DrawLight {
 public:
-    DrawLight(CullFunctor cullFunctor) : _cullFunctor{ cullFunctor } {}
-    void run(const SceneContextPointer& sceneContext, const RenderContextPointer& renderContext);
-    using JobModel = Task::Job::Model<DrawLight>;
+    using JobModel = Job::ModelI<DrawLight, ItemBounds>;
 
+    void run(const SceneContextPointer& sceneContext, const RenderContextPointer& renderContext, const ItemBounds& inLights);
 protected:
-    CullFunctor _cullFunctor;
 };
 
 class PipelineSortShapes {
 public:
-    void run(const SceneContextPointer& sceneContext, const RenderContextPointer& renderContext, const ItemIDsBounds& inItems, ShapesIDsBounds& outShapes);
-    using JobModel = Task::Job::ModelIO<PipelineSortShapes, ItemIDsBounds, ShapesIDsBounds>;
+    using JobModel = Job::ModelIO<PipelineSortShapes, ItemBounds, ShapesIDsBounds>;
+    void run(const SceneContextPointer& sceneContext, const RenderContextPointer& renderContext, const ItemBounds& inItems, ShapesIDsBounds& outShapes);
 };
 
 class DepthSortShapes {
 public:
+    using JobModel = Job::ModelIO<DepthSortShapes, ShapesIDsBounds, ShapesIDsBounds>;
+ 
     bool _frontToBack;
     DepthSortShapes(bool frontToBack = true) : _frontToBack(frontToBack) {}
 
     void run(const SceneContextPointer& sceneContext, const RenderContextPointer& renderContext, const ShapesIDsBounds& inShapes, ShapesIDsBounds& outShapes);
-    using JobModel = Task::Job::ModelIO<DepthSortShapes, ShapesIDsBounds, ShapesIDsBounds>;
 };
 
 }

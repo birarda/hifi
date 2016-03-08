@@ -20,6 +20,7 @@
 
 #include "GeometryCache.h"
 #include "FramebufferCache.h"
+#include "TextureCache.h"
 #include "DeferredLightingEffect.h"
 
 #include "debug_deferred_buffer_vert.h"
@@ -27,8 +28,19 @@
 
 using namespace render;
 
-enum Slots {
-    Diffuse = 0,
+void DebugDeferredBufferConfig::setMode(int newMode) {
+    if (newMode == mode) {
+        return;
+    } else if (newMode > DebugDeferredBuffer::CustomMode || newMode < 0) {
+        mode = DebugDeferredBuffer::CustomMode;
+    } else {
+        mode = newMode;
+    }
+    emit dirty();
+}
+
+enum Slot {
+    Albedo = 0,
     Normal,
     Specular,
     Depth,
@@ -39,27 +51,56 @@ enum Slots {
     AmbientOcclusionBlurred
 };
 
-static const std::string DEFAULT_DIFFUSE_SHADER {
+
+
+static const std::string DEFAULT_ALBEDO_SHADER {
     "vec4 getFragmentColor() {"
-    "    return vec4(pow(texture(diffuseMap, uv).xyz, vec3(1.0 / 2.2)), 1.0);"
+    "    DeferredFragment frag = unpackDeferredFragmentNoPosition(uv);"
+    "    return vec4(pow(frag.diffuse, vec3(1.0 / 2.2)), 1.0);"
     " }"
 };
 
-static const std::string DEFAULT_SPECULAR_SHADER {
+static const std::string DEFAULT_METALLIC_SHADER {
     "vec4 getFragmentColor() {"
-    "    return vec4(texture(specularMap, uv).xyz, 1.0);"
+    "    DeferredFragment frag = unpackDeferredFragmentNoPosition(uv);"
+    "    return vec4(vec3(pow(frag.metallic, 1.0 / 2.2)), 1.0);"
     " }"
 };
+
 static const std::string DEFAULT_ROUGHNESS_SHADER {
     "vec4 getFragmentColor() {"
-    "    return vec4(vec3(texture(specularMap, uv).a), 1.0);"
+    "    DeferredFragment frag = unpackDeferredFragmentNoPosition(uv);"
+    "    return vec4(vec3(pow(frag.roughness, 1.0 / 2.2)), 1.0);"
     " }"
 };
 static const std::string DEFAULT_NORMAL_SHADER {
     "vec4 getFragmentColor() {"
-    "    return vec4(normalize(texture(normalMap, uv).xyz * 2.0 - vec3(1.0)), 1.0);"
+    "    DeferredFragment frag = unpackDeferredFragmentNoPosition(uv);"
+    "    return vec4(vec3(0.5) + (frag.normal * 0.5), 1.0);"
     " }"
 };
+
+static const std::string DEFAULT_OCCLUSION_SHADER{
+    "vec4 getFragmentColor() {"
+    "    DeferredFragment frag = unpackDeferredFragmentNoPosition(uv);"
+    "    return vec4(vec3(frag.obscurance), 1.0);"
+    " }"
+};
+
+static const std::string DEFAULT_EMISSIVE_SHADER{
+    "vec4 getFragmentColor() {"
+    "    DeferredFragment frag = unpackDeferredFragmentNoPosition(uv);"
+    "    return (frag.mode != LIGHT_MAPPED ? vec4(pow(frag.emissive, vec3(1.0 / 2.2)), 1.0) : vec4(vec3(0.0), 1.0));"
+    " }"
+};
+
+static const std::string DEFAULT_LIGHTMAP_SHADER{
+    "vec4 getFragmentColor() {"
+    "    DeferredFragment frag = unpackDeferredFragmentNoPosition(uv);"
+    "    return (frag.mode == LIGHT_MAPPED ? vec4(frag.emissive, 1.0) : vec4(vec3(0.0), 1.0));"
+    " }"
+};
+
 static const std::string DEFAULT_DEPTH_SHADER {
     "vec4 getFragmentColor() {"
     "    return vec4(vec3(texture(depthMap, uv).x), 1.0);"
@@ -92,7 +133,7 @@ static const std::string DEFAULT_PYRAMID_DEPTH_SHADER {
 
 static const std::string DEFAULT_AMBIENT_OCCLUSION_SHADER{
     "vec4 getFragmentColor() {"
-    "    return vec4(vec3(texture(occlusionMap, uv).x), 1.0);"
+    "    return vec4(vec3(texture(obscuranceMap, uv).x), 1.0);"
     // When drawing color "    return vec4(vec3(texture(occlusionMap, uv).xyz), 1.0);"
     // when drawing normal "    return vec4(normalize(texture(occlusionMap, uv).xyz * 2.0 - vec3(1.0)), 1.0);"
     " }"
@@ -129,18 +170,24 @@ DebugDeferredBuffer::DebugDeferredBuffer() {
     _customPipelines.emplace(CUSTOM_FILE, pipeline);
 }
 
-std::string DebugDeferredBuffer::getShaderSourceCode(Modes mode, std::string customFile) {
+std::string DebugDeferredBuffer::getShaderSourceCode(Mode mode, std::string customFile) {
     switch (mode) {
-        case DiffuseMode:
-            return DEFAULT_DIFFUSE_SHADER;
-        case SpecularMode:
-            return DEFAULT_SPECULAR_SHADER;
+        case AlbedoMode:
+            return DEFAULT_ALBEDO_SHADER;
+        case MetallicMode:
+            return DEFAULT_METALLIC_SHADER;
         case RoughnessMode:
             return DEFAULT_ROUGHNESS_SHADER;
         case NormalMode:
             return DEFAULT_NORMAL_SHADER;
         case DepthMode:
             return DEFAULT_DEPTH_SHADER;
+        case EmissiveMode:
+            return DEFAULT_EMISSIVE_SHADER;
+        case OcclusionMode:
+            return DEFAULT_OCCLUSION_SHADER;
+        case LightmapMode:
+            return DEFAULT_LIGHTMAP_SHADER;
         case LightingMode:
             return DEFAULT_LIGHTING_SHADER;
         case ShadowMode:
@@ -158,7 +205,7 @@ std::string DebugDeferredBuffer::getShaderSourceCode(Modes mode, std::string cus
     return std::string();
 }
 
-bool DebugDeferredBuffer::pipelineNeedsUpdate(Modes mode, std::string customFile) const {
+bool DebugDeferredBuffer::pipelineNeedsUpdate(Mode mode, std::string customFile) const {
     if (mode != CustomMode) {
         return !_pipelines[mode];
     }
@@ -175,7 +222,7 @@ bool DebugDeferredBuffer::pipelineNeedsUpdate(Modes mode, std::string customFile
     return true;
 }
 
-const gpu::PipelinePointer& DebugDeferredBuffer::getPipeline(Modes mode, std::string customFile) {
+const gpu::PipelinePointer& DebugDeferredBuffer::getPipeline(Mode mode, std::string customFile) {
     if (pipelineNeedsUpdate(mode, customFile)) {
         static const std::string VERTEX_SHADER { debug_deferred_buffer_vert };
         static const std::string FRAGMENT_SHADER { debug_deferred_buffer_frag };
@@ -193,14 +240,14 @@ const gpu::PipelinePointer& DebugDeferredBuffer::getPipeline(Modes mode, std::st
         const auto program = gpu::Shader::createProgram(vs, ps);
         
         gpu::Shader::BindingSet slotBindings;
-        slotBindings.insert(gpu::Shader::Binding("diffuseMap", Diffuse));
+        slotBindings.insert(gpu::Shader::Binding("albedoMap", Albedo));
         slotBindings.insert(gpu::Shader::Binding("normalMap", Normal));
         slotBindings.insert(gpu::Shader::Binding("specularMap", Specular));
         slotBindings.insert(gpu::Shader::Binding("depthMap", Depth));
+        slotBindings.insert(gpu::Shader::Binding("obscuranceMap", AmbientOcclusion));
         slotBindings.insert(gpu::Shader::Binding("lightingMap", Lighting));
         slotBindings.insert(gpu::Shader::Binding("shadowMap", Shadow));
         slotBindings.insert(gpu::Shader::Binding("pyramidMap", Pyramid));
-        slotBindings.insert(gpu::Shader::Binding("occlusionMap", AmbientOcclusion));
         slotBindings.insert(gpu::Shader::Binding("occlusionBlurredMap", AmbientOcclusionBlurred));
         gpu::Shader::makeProgram(*program, slotBindings);
         
@@ -221,22 +268,20 @@ const gpu::PipelinePointer& DebugDeferredBuffer::getPipeline(Modes mode, std::st
     }
 }
 
+void DebugDeferredBuffer::configure(const Config& config) {
+    _mode = (Mode)config.mode;
+    _size = config.size;
+}
 
 void DebugDeferredBuffer::run(const SceneContextPointer& sceneContext, const RenderContextPointer& renderContext) {
-    assert(renderContext->getArgs());
-    assert(renderContext->getArgs()->_viewFrustum);
-    RenderArgs* args = renderContext->getArgs();
-
-    // Guard against unspecified modes
-    auto mode = renderContext->_deferredDebugMode;
-    if (mode > (int)CustomMode) {
-        renderContext->_deferredDebugMode = -1;
-        return;
-    }
+    assert(renderContext->args);
+    assert(renderContext->args->_viewFrustum);
+    RenderArgs* args = renderContext->args;
 
     gpu::doInBatch(args->_context, [&](gpu::Batch& batch) {
         const auto geometryBuffer = DependencyManager::get<GeometryCache>();
         const auto framebufferCache = DependencyManager::get<FramebufferCache>();
+        const auto textureCache = DependencyManager::get<TextureCache>();
         const auto& lightStage = DependencyManager::get<DeferredLightingEffect>()->getLightStage();
         
         glm::mat4 projMat;
@@ -250,21 +295,26 @@ void DebugDeferredBuffer::run(const SceneContextPointer& sceneContext, const Ren
         // TODO REMOVE: Temporary until UI
         auto first = _customPipelines.begin()->first;
         
-        batch.setPipeline(getPipeline(Modes(renderContext->_deferredDebugMode), first));
+        batch.setPipeline(getPipeline(_mode, first));
         
-        batch.setResourceTexture(Diffuse, framebufferCache->getDeferredColorTexture());
+        batch.setResourceTexture(Albedo, framebufferCache->getDeferredColorTexture());
         batch.setResourceTexture(Normal, framebufferCache->getDeferredNormalTexture());
         batch.setResourceTexture(Specular, framebufferCache->getDeferredSpecularTexture());
         batch.setResourceTexture(Depth, framebufferCache->getPrimaryDepthTexture());
         batch.setResourceTexture(Lighting, framebufferCache->getLightingTexture());
         batch.setResourceTexture(Shadow, lightStage.lights[0]->shadow.framebuffer->getDepthStencilBuffer());
         batch.setResourceTexture(Pyramid, framebufferCache->getDepthPyramidTexture());
-        batch.setResourceTexture(AmbientOcclusion, framebufferCache->getOcclusionTexture());
+        if (DependencyManager::get<DeferredLightingEffect>()->isAmbientOcclusionEnabled()) {
+            batch.setResourceTexture(AmbientOcclusion, framebufferCache->getOcclusionTexture());
+        } else {
+            // need to assign the white texture if ao is off
+            batch.setResourceTexture(AmbientOcclusion, textureCache->getWhiteTexture());
+        }
         batch.setResourceTexture(AmbientOcclusionBlurred, framebufferCache->getOcclusionBlurredTexture());
 
         const glm::vec4 color(1.0f, 1.0f, 1.0f, 1.0f);
-        const glm::vec2 bottomLeft(renderContext->_deferredDebugSize.x, renderContext->_deferredDebugSize.y);
-        const glm::vec2 topRight(renderContext->_deferredDebugSize.z, renderContext->_deferredDebugSize.w);
+        const glm::vec2 bottomLeft(_size.x, _size.y);
+        const glm::vec2 topRight(_size.z, _size.w);
         geometryBuffer->renderQuad(batch, bottomLeft, topRight, color);
     });
 }

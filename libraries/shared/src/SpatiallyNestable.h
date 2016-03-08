@@ -52,10 +52,10 @@ public:
     static glm::quat localToWorld(const glm::quat& orientation, const QUuid& parentID, int parentJointIndex, bool& success);
 
     // world frame
-    virtual const Transform getTransform(bool& success) const;
+    virtual const Transform getTransform(bool& success, int depth = 0) const;
     virtual void setTransform(const Transform& transform, bool& success);
 
-    virtual Transform getParentTransform(bool& success) const;
+    virtual Transform getParentTransform(bool& success, int depth = 0) const;
 
     virtual glm::vec3 getPosition(bool& success) const;
     virtual glm::vec3 getPosition() const;
@@ -67,6 +67,18 @@ public:
     virtual glm::quat getOrientation(int jointIndex, bool& success) const;
     virtual void setOrientation(const glm::quat& orientation, bool& success);
     virtual void setOrientation(const glm::quat& orientation);
+
+    virtual glm::vec3 getVelocity(bool& success) const;
+    virtual glm::vec3 getVelocity() const;
+    virtual void setVelocity(const glm::vec3& velocity, bool& success);
+    virtual void setVelocity(const glm::vec3& velocity);
+    virtual glm::vec3 getParentVelocity(bool& success) const;
+
+    virtual glm::vec3 getAngularVelocity(bool& success) const;
+    virtual glm::vec3 getAngularVelocity() const;
+    virtual void setAngularVelocity(const glm::vec3& angularVelocity, bool& success);
+    virtual void setAngularVelocity(const glm::vec3& angularVelocity);
+    virtual glm::vec3 getParentAngularVelocity(bool& success) const;
 
     virtual AACube getMaximumAACube(bool& success) const;
     virtual bool computePuffedQueryAACube();
@@ -80,7 +92,7 @@ public:
     virtual void setScale(const glm::vec3& scale);
 
     // get world-frame values for a specific joint
-    virtual const Transform getTransform(int jointIndex, bool& success) const;
+    virtual const Transform getTransform(int jointIndex, bool& success, int depth = 0) const;
     virtual glm::vec3 getPosition(int jointIndex, bool& success) const;
     virtual glm::vec3 getScale(int jointIndex) const;
 
@@ -94,10 +106,18 @@ public:
     virtual glm::quat getLocalOrientation() const;
     virtual void setLocalOrientation(const glm::quat& orientation);
 
+    virtual glm::vec3 getLocalVelocity() const;
+    virtual void setLocalVelocity(const glm::vec3& velocity);
+
+    virtual glm::vec3 getLocalAngularVelocity() const;
+    virtual void setLocalAngularVelocity(const glm::vec3& angularVelocity);
+
     virtual glm::vec3 getLocalScale() const;
     virtual void setLocalScale(const glm::vec3& scale);
 
     QList<SpatiallyNestablePointer> getChildren() const;
+    bool hasChildren() const;
+
     NestableType getNestableType() const { return _nestableType; }
 
     // this object's frame
@@ -126,6 +146,7 @@ protected:
     QUuid _parentID; // what is this thing's transform relative to?
     quint16 _parentJointIndex { 0 }; // which joint of the parent is this relative to?
     SpatiallyNestablePointer getParentPointer(bool& success) const;
+
     mutable SpatiallyNestableWeakPointer _parent;
 
     virtual void beParentOfChild(SpatiallyNestablePointer newChild) const;
@@ -146,7 +167,11 @@ protected:
 private:
     mutable ReadWriteLockable _transformLock;
     mutable ReadWriteLockable _idLock;
+    mutable ReadWriteLockable _velocityLock;
+    mutable ReadWriteLockable _angularVelocityLock;
     Transform _transform; // this is to be combined with parent's world-transform to produce this' world-transform.
+    glm::vec3 _velocity;
+    glm::vec3 _angularVelocity;
     mutable bool _parentKnowsMe { false };
     bool _isDead { false };
 };

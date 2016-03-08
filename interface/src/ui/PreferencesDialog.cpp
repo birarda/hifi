@@ -16,6 +16,7 @@
 #include <ScriptEngines.h>
 #include <OffscreenUi.h>
 #include <Preferences.h>
+#include <display-plugins/CompositorHelper.h>
 
 #include "Application.h"
 #include "DialogsManager.h"
@@ -23,6 +24,10 @@
 #include "Menu.h"
 #include "Snapshot.h"
 #include "UserActivityLogger.h"
+
+#include "AmbientOcclusionEffect.h"
+#include "AntialiasingEffect.h"
+#include "RenderShadowTask.h"
 
 void setupPreferences() {
     auto preferences = DependencyManager::get<Preferences>();
@@ -32,8 +37,7 @@ void setupPreferences() {
     {
         auto getter = [=]()->QString {return myAvatar->getDisplayName(); };
         auto setter = [=](const QString& value) { myAvatar->setDisplayName(value); };
-        const QString label = "Avatar display name <font color=\"#909090\">(optional)</font>";
-        auto preference = new EditPreference(AVATAR_BASICS, label, getter, setter);
+        auto preference = new EditPreference(AVATAR_BASICS, "Avatar display name (optional)", getter, setter);
         preference->setPlaceholderText("Not showing a name");
         preferences->addPreference(preference);
     }
@@ -41,8 +45,7 @@ void setupPreferences() {
     {
         auto getter = [=]()->QString {return myAvatar->getCollisionSoundURL(); };
         auto setter = [=](const QString& value) { myAvatar->setCollisionSoundURL(value); };
-        const QString label = "Avatar collision sound URL <font color=\"#909090\">(optional)</font>";
-        auto preference = new EditPreference(AVATAR_BASICS, label, getter, setter);
+        auto preference = new EditPreference(AVATAR_BASICS, "Avatar collision sound URL (optional)", getter, setter);
         preference->setPlaceholderText("Enter the URL of a sound to play when you bump into something");
         preferences->addPreference(preference);
     }
@@ -50,14 +53,18 @@ void setupPreferences() {
     {
         auto getter = [=]()->QString { return myAvatar->getFullAvatarURLFromPreferences().toString(); };
         auto setter = [=](const QString& value) { myAvatar->useFullAvatarURL(value, ""); };
-        auto preference = new AvatarPreference(AVATAR_BASICS, "Appearance: ", getter, setter);
+        auto preference = new AvatarPreference(AVATAR_BASICS, "Appearance", getter, setter);
         preferences->addPreference(preference);
     }
-
+    {
+        auto getter = [=]()->bool {return myAvatar->getSnapTurn(); };
+        auto setter = [=](bool value) { myAvatar->setSnapTurn(value); };
+        preferences->addPreference(new CheckPreference(AVATAR_BASICS, "Snap turn when in HMD", getter, setter));
+    }
     {
         auto getter = []()->QString { return Snapshot::snapshotsLocation.get(); };
         auto setter = [](const QString& value) { Snapshot::snapshotsLocation.set(value); };
-        auto preference = new BrowsePreference("Snapshots", "Place my Snapshots here:", getter, setter);
+        auto preference = new BrowsePreference("Snapshots", "Put my snapshots here", getter, setter);
         preferences->addPreference(preference);
     }
 
@@ -65,7 +72,7 @@ void setupPreferences() {
     {
         auto getter = []()->QString { return DependencyManager::get<ScriptEngines>()->getScriptsLocation(); };
         auto setter = [](const QString& value) { DependencyManager::get<ScriptEngines>()->setScriptsLocation(value); };
-        preferences->addPreference(new BrowsePreference("Scripts", "Load scripts from this directory:", getter, setter));
+        preferences->addPreference(new BrowsePreference("Scripts", "Load scripts from this directory", getter, setter));
     }
 
     preferences->addPreference(new ButtonPreference("Scripts", "Load Default Scripts", [] {
@@ -75,25 +82,17 @@ void setupPreferences() {
     {
         auto getter = []()->bool {return !Menu::getInstance()->isOptionChecked(MenuOption::DisableActivityLogger); };
         auto setter = [](bool value) { Menu::getInstance()->setIsOptionChecked(MenuOption::DisableActivityLogger, !value); };
-        preferences->addPreference(new CheckPreference("Privacy", "Send Data", getter, setter));
+        preferences->addPreference(new CheckPreference("Privacy", "Send data", getter, setter));
     }
     
     static const QString LOD_TUNING("Level of Detail Tuning");
-    CheckPreference* acuityToggle;
-    {
-        auto getter = []()->bool { return DependencyManager::get<LODManager>()->getUseAcuity(); };
-        auto setter = [](bool value) { DependencyManager::get<LODManager>()->setUseAcuity(value); };
-        preferences->addPreference(acuityToggle = new CheckPreference(LOD_TUNING, "Render based on visual acuity", getter, setter));
-    }
-
     {
         auto getter = []()->float { return DependencyManager::get<LODManager>()->getDesktopLODDecreaseFPS(); };
         auto setter = [](float value) { DependencyManager::get<LODManager>()->setDesktopLODDecreaseFPS(value); };
-        auto preference = new SpinnerPreference(LOD_TUNING, "Minimum Desktop FPS", getter, setter);
+        auto preference = new SpinnerPreference(LOD_TUNING, "Minimum desktop FPS", getter, setter);
         preference->setMin(0);
         preference->setMax(120);
         preference->setStep(1);
-        preference->setEnabler(acuityToggle);
         preferences->addPreference(preference);
     }
 
@@ -104,18 +103,6 @@ void setupPreferences() {
         preference->setMin(0);
         preference->setMax(120);
         preference->setStep(1);
-        preference->setEnabler(acuityToggle);
-        preferences->addPreference(preference);
-    }
-
-    {
-        auto getter = []()->float { return 1.0f / DependencyManager::get<LODManager>()->getRenderDistanceInverseHighLimit(); };
-        auto setter = [](float value) { DependencyManager::get<LODManager>()->setRenderDistanceInverseHighLimit(1.0f / value); };
-        auto preference = new SpinnerPreference(LOD_TUNING, "Minimum Display Distance", getter, setter);
-        preference->setMin(5);
-        preference->setMax(32768);
-        preference->setStep(1);
-        preference->setEnabler(acuityToggle, true);
         preferences->addPreference(preference);
     }
 
@@ -150,7 +137,7 @@ void setupPreferences() {
     {
         auto getter = [=]()->float { return myAvatar->getUniformScale(); };
         auto setter = [=](float value) { myAvatar->setTargetScaleVerbose(value); }; // The hell?
-        auto preference = new SpinnerPreference(AVATAR_TUNING, "Avatar scale <font color=\"#909090\">(default is 1.0)</font>", getter, setter);
+        auto preference = new SpinnerPreference(AVATAR_TUNING, "Avatar scale (default is 1.0)", getter, setter);
         preference->setMin(0.01f);
         preference->setMax(99.9f);
         preference->setDecimals(2);
@@ -182,8 +169,26 @@ void setupPreferences() {
     {
         auto getter = [=]()->QString { return myAvatar->getAnimGraphUrl().toString(); };
         auto setter = [=](const QString& value) { myAvatar->setAnimGraphUrl(value); };
-        auto preference = new EditPreference(AVATAR_TUNING, "Avatar Animation JSON", getter, setter);
+        auto preference = new EditPreference(AVATAR_TUNING, "Avatar animation JSON", getter, setter);
         preference->setPlaceholderText("default");
+        preferences->addPreference(preference);
+    }
+
+    static const QString AVATAR_CAMERA { "Avatar Camera" };
+    {
+        auto getter = [=]()->float { return myAvatar->getPitchSpeed(); };
+        auto setter = [=](float value) { myAvatar->setPitchSpeed(value); };
+        auto preference = new SpinnerPreference(AVATAR_CAMERA, "Camera pitch speed (degrees/second)", getter, setter);
+        preference->setMin(1.0f);
+        preference->setMax(360.0f);
+        preferences->addPreference(preference);
+    }
+    {
+        auto getter = [=]()->float { return myAvatar->getYawSpeed(); };
+        auto setter = [=](float value) { myAvatar->setYawSpeed(value); };
+        auto preference = new SpinnerPreference(AVATAR_CAMERA, "Camera yaw speed (degrees/second)", getter, setter);
+        preference->setMin(1.0f);
+        preference->setMax(360.0f);
         preferences->addPreference(preference);
     }
 
@@ -191,13 +196,13 @@ void setupPreferences() {
     {
         auto getter = []()->bool {return DependencyManager::get<AudioClient>()->getReceivedAudioStream().getDynamicJitterBuffers(); };
         auto setter = [](bool value) { DependencyManager::get<AudioClient>()->getReceivedAudioStream().setDynamicJitterBuffers(value); };
-        preferences->addPreference(new CheckPreference(AUDIO, "Enable Dynamic Jitter Buffers", getter, setter));
+        preferences->addPreference(new CheckPreference(AUDIO, "Enable dynamic jitter buffers", getter, setter));
     }
     {
         auto getter = []()->float { return DependencyManager::get<AudioClient>()->getReceivedAudioStream().getDesiredJitterBufferFrames(); };
         auto setter = [](float value) { DependencyManager::get<AudioClient>()->getReceivedAudioStream().setStaticDesiredJitterBufferFrames(value); };
         
-        auto preference = new SpinnerPreference(AUDIO, "Static Jitter Buffer Frames", getter, setter);
+        auto preference = new SpinnerPreference(AUDIO, "Static jitter buffer frames", getter, setter);
         preference->setMin(0);
         preference->setMax(10000);
         preference->setStep(1);
@@ -206,7 +211,7 @@ void setupPreferences() {
     {
         auto getter = []()->float { return DependencyManager::get<AudioClient>()->getReceivedAudioStream().getMaxFramesOverDesired(); };
         auto setter = [](float value) { DependencyManager::get<AudioClient>()->getReceivedAudioStream().setMaxFramesOverDesired(value); };
-        auto preference = new SpinnerPreference(AUDIO, "Max Frames Over Desired", getter, setter);
+        auto preference = new SpinnerPreference(AUDIO, "Max frames over desired", getter, setter);
         preference->setMax(10000);
         preference->setStep(1);
         preferences->addPreference(preference);
@@ -214,12 +219,12 @@ void setupPreferences() {
     {
         auto getter = []()->bool {return DependencyManager::get<AudioClient>()->getReceivedAudioStream().getUseStDevForJitterCalc(); };
         auto setter = [](bool value) { DependencyManager::get<AudioClient>()->getReceivedAudioStream().setUseStDevForJitterCalc(value); };
-        preferences->addPreference(new CheckPreference(AUDIO, "Use Stddev for Dynamic Jitter Calc", getter, setter));
+        preferences->addPreference(new CheckPreference(AUDIO, "Use standard deviation for dynamic jitter calc", getter, setter));
     }
     {
         auto getter = []()->float { return DependencyManager::get<AudioClient>()->getReceivedAudioStream().getWindowStarveThreshold(); };
         auto setter = [](float value) { DependencyManager::get<AudioClient>()->getReceivedAudioStream().setWindowStarveThreshold(value); };
-        auto preference = new SpinnerPreference(AUDIO, "Window A Starve Threshold", getter, setter);
+        auto preference = new SpinnerPreference(AUDIO, "Window A starve threshold", getter, setter);
         preference->setMax(10000);
         preference->setStep(1);
         preferences->addPreference(preference);
@@ -227,7 +232,7 @@ void setupPreferences() {
     {
         auto getter = []()->float { return DependencyManager::get<AudioClient>()->getReceivedAudioStream().getWindowSecondsForDesiredCalcOnTooManyStarves(); };
         auto setter = [](float value) { DependencyManager::get<AudioClient>()->getReceivedAudioStream().setWindowSecondsForDesiredCalcOnTooManyStarves(value); };
-        auto preference = new SpinnerPreference(AUDIO, "Window A (raise desired on N starves) Seconds)", getter, setter);
+        auto preference = new SpinnerPreference(AUDIO, "Window A (raise desired on N starves) seconds", getter, setter);
         preference->setMax(10000);
         preference->setStep(1);
         preferences->addPreference(preference);
@@ -235,7 +240,7 @@ void setupPreferences() {
     {
         auto getter = []()->float { return DependencyManager::get<AudioClient>()->getReceivedAudioStream().getWindowSecondsForDesiredReduction(); };
         auto setter = [](float value) { DependencyManager::get<AudioClient>()->getReceivedAudioStream().setWindowSecondsForDesiredReduction(value); };
-        auto preference = new SpinnerPreference(AUDIO, "Window B (desired ceiling) Seconds", getter, setter);
+        auto preference = new SpinnerPreference(AUDIO, "Window B (desired ceiling) seconds", getter, setter);
         preference->setMax(10000);
         preference->setStep(1);
         preferences->addPreference(preference);
@@ -243,12 +248,12 @@ void setupPreferences() {
     {
         auto getter = []()->bool {return DependencyManager::get<AudioClient>()->getReceivedAudioStream().getRepetitionWithFade(); };
         auto setter = [](bool value) { DependencyManager::get<AudioClient>()->getReceivedAudioStream().setRepetitionWithFade(value); };
-        preferences->addPreference(new CheckPreference(AUDIO, "Repetition with Fade", getter, setter));
+        preferences->addPreference(new CheckPreference(AUDIO, "Repetition with fade", getter, setter));
     }
     {
         auto getter = []()->float { return DependencyManager::get<AudioClient>()->getOutputBufferSize(); };
         auto setter = [](float value) { DependencyManager::get<AudioClient>()->setOutputBufferSize(value); };
-        auto preference = new SpinnerPreference(AUDIO, "Output Buffer Size (frames)", getter, setter);
+        auto preference = new SpinnerPreference(AUDIO, "Output buffer initial size (frames)", getter, setter);
         preference->setMin(1);
         preference->setMax(20);
         preference->setStep(1);
@@ -257,13 +262,13 @@ void setupPreferences() {
     {
         auto getter = []()->bool {return DependencyManager::get<AudioClient>()->getOutputStarveDetectionEnabled(); };
         auto setter = [](bool value) { DependencyManager::get<AudioClient>()->setOutputStarveDetectionEnabled(value); };
-        auto preference = new CheckPreference(AUDIO, "Output Starve Detection (Automatic Buffer Size Increase)", getter, setter);
+        auto preference = new CheckPreference(AUDIO, "Output starve detection (automatic buffer size increase)", getter, setter);
         preferences->addPreference(preference);
     }
     {
         auto getter = []()->float { return DependencyManager::get<AudioClient>()->getOutputStarveDetectionThreshold(); };
         auto setter = [](float value) { DependencyManager::get<AudioClient>()->setOutputStarveDetectionThreshold(value); };
-        auto preference = new SpinnerPreference(AUDIO, "Output Starve Detection Threshold", getter, setter);
+        auto preference = new SpinnerPreference(AUDIO, "Output starve detection threshold", getter, setter);
         preference->setMin(1);
         preference->setMax(500);
         preference->setStep(1);
@@ -272,7 +277,7 @@ void setupPreferences() {
     {
         auto getter = []()->float { return DependencyManager::get<AudioClient>()->getOutputStarveDetectionPeriod(); };
         auto setter = [](float value) { DependencyManager::get<AudioClient>()->setOutputStarveDetectionPeriod(value); };
-        auto preference = new SpinnerPreference(AUDIO, "Output Starve Detection Period (ms)", getter, setter);
+        auto preference = new SpinnerPreference(AUDIO, "Output starve detection period (ms)", getter, setter);
         preference->setMin(1);
         preference->setMax((float)999999999);
         preference->setStep(1);
@@ -293,7 +298,7 @@ void setupPreferences() {
     {
         auto getter = []()->float { return qApp->getApplicationCompositor().getHmdUIAngularSize(); };
         auto setter = [](float value) { qApp->getApplicationCompositor().setHmdUIAngularSize(value); };
-        auto preference = new SpinnerPreference("HMD", "User Interface Horizontal Angular Size (degrees)", getter, setter);
+        auto preference = new SpinnerPreference("HMD", "UI horizontal angular size (degrees)", getter, setter);
         preference->setMin(30);
         preference->setMax(160);
         preference->setStep(1);
@@ -304,10 +309,33 @@ void setupPreferences() {
     {
         auto getter = []()->float { return controller::InputDevice::getReticleMoveSpeed(); };
         auto setter = [](float value) { controller::InputDevice::setReticleMoveSpeed(value); };
-        auto preference = new SpinnerPreference("Sixense Controllers", "Reticle Movement Speed", getter, setter);
+        auto preference = new SpinnerPreference("Sixense Controllers", "Reticle movement speed", getter, setter);
         preference->setMin(0);
         preference->setMax(100);
         preference->setStep(1);
         preferences->addPreference(preference);
+    }
+
+    {
+        static const QString RENDER("Graphics");
+        auto renderConfig = qApp->getRenderEngine()->getConfiguration();
+
+        auto ambientOcclusionConfig = renderConfig->getConfig<AmbientOcclusionEffect>();
+        {
+            auto getter = [ambientOcclusionConfig]()->QString { return ambientOcclusionConfig->getPreset(); };
+            auto setter = [ambientOcclusionConfig](QString preset) { ambientOcclusionConfig->setPreset(preset); };
+            auto preference = new ComboBoxPreference(RENDER, "Ambient occlusion", getter, setter);
+            preference->setItems(ambientOcclusionConfig->getPresetList());
+            preferences->addPreference(preference);
+        }
+
+        auto shadowConfig = renderConfig->getConfig<RenderShadowTask>();
+        {
+            auto getter = [shadowConfig]()->QString { return shadowConfig->getPreset(); };
+            auto setter = [shadowConfig](QString preset) { shadowConfig->setPreset(preset); };
+            auto preference = new ComboBoxPreference(RENDER, "Shadows", getter, setter);
+            preference->setItems(shadowConfig->getPresetList());
+            preferences->addPreference(preference);
+        }
     }
 }

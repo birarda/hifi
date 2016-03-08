@@ -245,6 +245,7 @@ EntityPropertyFlags EntityItemProperties::getChangedProperties() const {
     CHECK_PROPERTY_CHANGE(PROP_DYNAMIC, dynamic);
     CHECK_PROPERTY_CHANGE(PROP_IS_SPOTLIGHT, isSpotlight);
     CHECK_PROPERTY_CHANGE(PROP_INTENSITY, intensity);
+    CHECK_PROPERTY_CHANGE(PROP_FALLOFF_RADIUS, falloffRadius);
     CHECK_PROPERTY_CHANGE(PROP_EXPONENT, exponent);
     CHECK_PROPERTY_CHANGE(PROP_CUTOFF, cutoff);
     CHECK_PROPERTY_CHANGE(PROP_LOCKED, locked);
@@ -320,6 +321,11 @@ EntityPropertyFlags EntityItemProperties::getChangedProperties() const {
 QScriptValue EntityItemProperties::copyToScriptValue(QScriptEngine* engine, bool skipDefaults) const {
     QScriptValue properties = engine->newObject();
     EntityItemProperties defaultEntityProperties;
+
+    if (_created == UNKNOWN_CREATED_TIME) {
+        // No entity properties can have been set so return without setting any default, zero property values.
+        return properties;
+    }
 
     if (_idSet) {
         COPY_PROPERTY_TO_QSCRIPTVALUE_GETTER_ALWAYS(id, _id.toString());
@@ -440,6 +446,7 @@ QScriptValue EntityItemProperties::copyToScriptValue(QScriptEngine* engine, bool
     if (_type == EntityTypes::Light) {
         COPY_PROPERTY_TO_QSCRIPTVALUE(PROP_IS_SPOTLIGHT, isSpotlight);
         COPY_PROPERTY_TO_QSCRIPTVALUE(PROP_INTENSITY, intensity);
+        COPY_PROPERTY_TO_QSCRIPTVALUE(PROP_FALLOFF_RADIUS, falloffRadius);
         COPY_PROPERTY_TO_QSCRIPTVALUE(PROP_EXPONENT, exponent);
         COPY_PROPERTY_TO_QSCRIPTVALUE(PROP_CUTOFF, cutoff);
     }
@@ -592,6 +599,7 @@ void EntityItemProperties::copyFromScriptValue(const QScriptValue& object, bool 
     COPY_PROPERTY_FROM_QSCRIPTVALUE(dynamic, bool, setDynamic);
     COPY_PROPERTY_FROM_QSCRIPTVALUE(isSpotlight, bool, setIsSpotlight);
     COPY_PROPERTY_FROM_QSCRIPTVALUE(intensity, float, setIntensity);
+    COPY_PROPERTY_FROM_QSCRIPTVALUE(falloffRadius, float, setFalloffRadius);
     COPY_PROPERTY_FROM_QSCRIPTVALUE(exponent, float, setExponent);
     COPY_PROPERTY_FROM_QSCRIPTVALUE(cutoff, float, setCutoff);
     COPY_PROPERTY_FROM_QSCRIPTVALUE(locked, bool, setLocked);
@@ -757,6 +765,7 @@ void EntityItemProperties::entityPropertyFlagsFromScriptValue(const QScriptValue
         ADD_PROPERTY_TO_MAP(PROP_DYNAMIC, unused, dynamic, unused);
         ADD_PROPERTY_TO_MAP(PROP_IS_SPOTLIGHT, IsSpotlight, isSpotlight, bool);
         ADD_PROPERTY_TO_MAP(PROP_INTENSITY, Intensity, intensity, float);
+        ADD_PROPERTY_TO_MAP(PROP_FALLOFF_RADIUS, FalloffRadius, falloffRadius, float);
         ADD_PROPERTY_TO_MAP(PROP_EXPONENT, Exponent, exponent, float);
         ADD_PROPERTY_TO_MAP(PROP_CUTOFF, Cutoff, cutoff, float);
         ADD_PROPERTY_TO_MAP(PROP_LOCKED, Locked, locked, bool);
@@ -905,7 +914,7 @@ bool EntityItemProperties::encodeEntityEditPacket(PacketType command, EntityItem
     success = packetData->startSubTree(octcode);
     delete[] octcode;
 
-    // assuming we have rome to fit our octalCode, proceed...
+    // assuming we have room to fit our octalCode, proceed...
     if (success) {
 
         // Now add our edit content details...
@@ -1038,6 +1047,7 @@ bool EntityItemProperties::encodeEntityEditPacket(PacketType command, EntityItem
                 APPEND_ENTITY_PROPERTY(PROP_IS_SPOTLIGHT, properties.getIsSpotlight());
                 APPEND_ENTITY_PROPERTY(PROP_COLOR, properties.getColor());
                 APPEND_ENTITY_PROPERTY(PROP_INTENSITY, properties.getIntensity());
+                APPEND_ENTITY_PROPERTY(PROP_FALLOFF_RADIUS, properties.getFalloffRadius());
                 APPEND_ENTITY_PROPERTY(PROP_EXPONENT, properties.getExponent());
                 APPEND_ENTITY_PROPERTY(PROP_CUTOFF, properties.getCutoff());
             }
@@ -1327,6 +1337,7 @@ bool EntityItemProperties::decodeEntityEditPacket(const unsigned char* data, int
         READ_ENTITY_PROPERTY_TO_PROPERTIES(PROP_IS_SPOTLIGHT, bool, setIsSpotlight);
         READ_ENTITY_PROPERTY_TO_PROPERTIES(PROP_COLOR, xColor, setColor);
         READ_ENTITY_PROPERTY_TO_PROPERTIES(PROP_INTENSITY, float, setIntensity);
+        READ_ENTITY_PROPERTY_TO_PROPERTIES(PROP_FALLOFF_RADIUS, float, setFalloffRadius);
         READ_ENTITY_PROPERTY_TO_PROPERTIES(PROP_EXPONENT, float, setExponent);
         READ_ENTITY_PROPERTY_TO_PROPERTIES(PROP_CUTOFF, float, setCutoff);
     }
@@ -1472,6 +1483,7 @@ void EntityItemProperties::markAllChanged() {
     _dynamicChanged = true;
 
     _intensityChanged = true;
+    _falloffRadiusChanged = true;
     _exponentChanged = true;
     _cutoffChanged = true;
     _lockedChanged = true;
@@ -1713,6 +1725,9 @@ QList<QString> EntityItemProperties::listChangedProperties() {
     }
     if (intensityChanged()) {
         out += "intensity";
+    }
+    if (falloffRadiusChanged()) {
+        out += "falloffRadius";
     }
     if (exponentChanged()) {
         out += "exponent";
