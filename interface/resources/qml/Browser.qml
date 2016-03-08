@@ -14,7 +14,8 @@ Window {
     destroyOnInvisible: true
     width: 800
     height: 600
-
+    property alias webView: webview
+    
     Component.onCompleted: {
         visible = true
         addressBar.text = webview.url
@@ -28,6 +29,7 @@ Window {
     }
 
     Item {
+        id:item
         anchors.fill: parent
         Rectangle {
             anchors.left: parent.left
@@ -108,7 +110,7 @@ Window {
             }
         }
 
-        WebEngineView {
+        WebView {
             id: webview
             url: "http://highfidelity.com"
             anchors.top: buttons.bottom
@@ -124,7 +126,11 @@ Window {
             onIconChanged: {
                 console.log("New icon: " + icon)
             }
+            
+            profile: desktop.browserProfile
+    
         }
+
     } // item
     
     Keys.onPressed: {

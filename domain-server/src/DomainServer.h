@@ -61,11 +61,11 @@ public slots:
     void processNodeJSONStatsPacket(QSharedPointer<ReceivedMessage> packetList, SharedNodePointer sendingNode);
     void processPathQueryPacket(QSharedPointer<ReceivedMessage> packet);
     void processNodeDisconnectRequestPacket(QSharedPointer<ReceivedMessage> message);
+    void processICEServerHeartbeatDenialPacket(QSharedPointer<ReceivedMessage> message);
     
 private slots:
     void aboutToQuit();
 
-    void loginFailed();
     void setupPendingAssignmentCredits();
     void sendPendingTransactionsToServer();
 
@@ -77,16 +77,18 @@ private slots:
 
     void handleTempDomainSuccess(QNetworkReply& requestReply);
     void handleTempDomainError(QNetworkReply& requestReply);
+
+    void queuedQuit(QString quitMessage, int exitCode);
+
+    void handleKeypairChange();
     
 private:
     void setupNodeListAndAssignments(const QUuid& sessionUUID = QUuid::createUuid());
     bool optionallySetupOAuth();
     bool optionallyReadX509KeyAndCertificate();
-    bool optionallySetupAssignmentPayment();
 
     void optionallyGetTemporaryName(const QStringList& arguments);
 
-    bool didSetupAccountManagerWithAccessToken();
     bool resetAccountManagerAccessToken();
 
     void setupAutomaticNetworking();
@@ -142,6 +144,8 @@ private:
     QString _oauthClientSecret;
     QString _hostname;
 
+    std::unordered_map<QUuid, QByteArray> _ephemeralACScripts;
+
     QSet<QUuid> _webAuthenticationStateSet;
     QHash<QUuid, DomainServerWebSessionData> _cookieSessionHash;
 
@@ -150,6 +154,7 @@ private:
     DomainServerSettingsManager _settingsManager;
 
     HifiSockAddr _iceServerSocket;
+    std::unique_ptr<NLPacket> _iceServerHeartbeatPacket;
 
     QTimer* _iceHeartbeatTimer { nullptr }; // this looks like it dangles when created but it's parented to the DomainServer
     

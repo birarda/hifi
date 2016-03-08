@@ -51,7 +51,6 @@
 #include "render/Engine.h"
 #include "scripting/ControllerScriptingInterface.h"
 #include "scripting/DialogsManagerScriptingInterface.h"
-#include "ui/ApplicationCompositor.h"
 #include "ui/ApplicationOverlay.h"
 #include "ui/AudioStatsDialog.h"
 #include "ui/BandwidthDialog.h"
@@ -60,7 +59,6 @@
 #include "ui/OctreeStatsDialog.h"
 #include "ui/OverlayConductor.h"
 #include "ui/overlays/Overlays.h"
-#include "ui/SnapshotShareDialog.h"
 #include "UndoStackScriptingInterface.h"
 
 class OffscreenGLCanvas;
@@ -68,6 +66,7 @@ class GLCanvas;
 class FaceTracker;
 class MainWindow;
 class AssetUpload;
+class CompositorHelper;
 
 namespace controller {
     class StateController;
@@ -103,6 +102,9 @@ public:
 
     void postLambdaEvent(std::function<void()> f) override;
 
+    QString getPreviousScriptLocation();
+    void setPreviousScriptLocation(const QString& previousScriptLocation);
+
     void initializeGL();
     void initializeUi();
     void paintGL();
@@ -112,14 +114,18 @@ public:
     bool eventFilter(QObject* object, QEvent* event) override;
 
     glm::uvec2 getCanvasSize() const;
+    QRect getRenderingGeometry() const;
+
     glm::uvec2 getUiSize() const;
     QSize getDeviceSize() const;
     bool hasFocus() const;
-    PickRay computePickRay() const;
+
+    void showCursor(const QCursor& cursor);
 
     bool isThrottleRendering() const;
 
     Camera* getCamera() { return &_myCamera; }
+    const Camera* getCamera() const { return &_myCamera; }
     // Represents the current view frustum of the avatar.
     ViewFrustum* getViewFrustum();
     const ViewFrustum* getViewFrustum() const;
@@ -137,16 +143,15 @@ public:
     EntityTreeRenderer* getEntityClipboardRenderer() { return &_entityClipboardRenderer; }
     EntityEditPacketSender* getEntityEditPacketSender() { return &_entityEditSender; }
 
-    ivec2 getMouse() const;
-    ivec2 getTrueMouse() const;
+    ivec2 getMouse();
 
     FaceTracker* getActiveFaceTracker();
     FaceTracker* getSelectedFaceTracker();
 
     ApplicationOverlay& getApplicationOverlay() { return _applicationOverlay; }
     const ApplicationOverlay& getApplicationOverlay() const { return _applicationOverlay; }
-    ApplicationCompositor& getApplicationCompositor() { return _compositor; }
-    const ApplicationCompositor& getApplicationCompositor() const { return _compositor; }
+    CompositorHelper& getApplicationCompositor() const;
+
     Overlays& getOverlays() { return _overlays; }
 
     bool isForeground() const { return _isForeground; }
@@ -155,7 +160,6 @@ public:
     float getFps() const { return _fps; }
     float getTargetFrameRate(); // frames/second
     float getLastInstanteousFps() const { return _lastInstantaneousFps; }
-    float getLastUnsynchronizedFps() const { return _lastUnsynchronizedFps; }
 
     float getFieldOfView() { return _fieldOfView.get(); }
     void setFieldOfView(float fov);
@@ -165,13 +169,11 @@ public:
     virtual controller::ScriptingInterface* getControllerScriptingInterface() { return _controllerScriptingInterface; }
     virtual void registerScriptEngineWithApplicationServices(ScriptEngine* scriptEngine) override;
 
-    QImage renderAvatarBillboard(RenderArgs* renderArgs);
-
-    virtual ViewFrustum* getCurrentViewFrustum() { return getDisplayViewFrustum(); }
-    virtual QThread* getMainThread() { return thread(); }
-    virtual PickRay computePickRay(float x, float y) const;
-    virtual glm::vec3 getAvatarPosition() const;
-    virtual qreal getDevicePixelRatio();
+    virtual ViewFrustum* getCurrentViewFrustum() override { return getDisplayViewFrustum(); }
+    virtual QThread* getMainThread() override { return thread(); }
+    virtual PickRay computePickRay(float x, float y) const override;
+    virtual glm::vec3 getAvatarPosition() const override;
+    virtual qreal getDevicePixelRatio() override;
 
     void setActiveDisplayPlugin(const QString& pluginName);
 
@@ -223,7 +225,6 @@ signals:
     void svoImportRequested(const QString& url);
 
     void checkBackgroundDownloads();
-    void domainConnectionRefused(const QString& reason);
 
     void fullAvatarURLChanged(const QString& newValue, const QString& modelName);
 
@@ -244,8 +245,6 @@ public slots:
 
     void handleLocalServerConnection();
     void readArgumentsFromLocalSocket();
-
-    void showFriendsWindow();
 
     void packageModel();
 
@@ -271,6 +270,8 @@ public slots:
 
     void cycleCamera();
     void cameraMenuChanged();
+    void toggleOverlays();
+    void setOverlaysVisible(bool visible);
 
     void reloadResourceCaches();
 
@@ -281,19 +282,17 @@ public slots:
     void runTests();
 
 private slots:
+    void showDesktop();
     void clearDomainOctreeDetails();
     void idle(uint64_t now);
     void aboutToQuit();
 
-    void connectedToDomain(const QString& hostname);
+    void resettingDomain();
 
     void audioMuteToggled();
     void faceTrackerMuteToggled();
 
     void activeChanged(Qt::ApplicationState state);
-
-    void domainSettingsReceived(const QJsonObject& domainSettingsObject);
-    void handleDomainConnectionDeniedPacket(QSharedPointer<ReceivedMessage> message);
 
     void notifyPacketVersionMismatch();
 
@@ -325,8 +324,6 @@ private:
 
     void cleanupBeforeQuit();
 
-    void emptyLocalCache();
-
     void update(float deltaTime);
 
     void setPalmData(Hand* hand, const controller::Pose& pose, float deltaTime, HandData::Hand whichHand, float triggerValue);
@@ -341,7 +338,7 @@ private:
 
     glm::vec3 getSunDirection();
 
-    void renderRearViewMirror(RenderArgs* renderArgs, const QRect& region, bool billboard = false);
+    void renderRearViewMirror(RenderArgs* renderArgs, const QRect& region);
 
     int sendNackPackets();
 
@@ -352,9 +349,8 @@ private:
     void checkSkeleton();
 
     void initializeAcceptedFiles();
-    int getRenderAmbientLight() const;
 
-    void displaySide(RenderArgs* renderArgs, Camera& whichCamera, bool selfAvatarOnly = false, bool billboard = false);
+    void displaySide(RenderArgs* renderArgs, Camera& whichCamera, bool selfAvatarOnly = false);
 
     bool importSVOFromURL(const QString& urlString);
 
@@ -370,10 +366,10 @@ private:
     void focusOutEvent(QFocusEvent* event);
     void focusInEvent(QFocusEvent* event);
 
-    void mouseMoveEvent(QMouseEvent* event, unsigned int deviceID = 0);
-    void mousePressEvent(QMouseEvent* event, unsigned int deviceID = 0);
-    void mouseDoublePressEvent(QMouseEvent* event, unsigned int deviceID = 0);
-    void mouseReleaseEvent(QMouseEvent* event, unsigned int deviceID = 0);
+    void mouseMoveEvent(QMouseEvent* event);
+    void mousePressEvent(QMouseEvent* event);
+    void mouseDoublePressEvent(QMouseEvent* event);
+    void mouseReleaseEvent(QMouseEvent* event);
 
     void touchBeginEvent(QTouchEvent* event);
     void touchEndEvent(QTouchEvent* event);
@@ -383,6 +379,7 @@ private:
     void dropEvent(QDropEvent* event);
     void dragEnterEvent(QDragEnterEvent* event);
 
+    void maybeToggleMenuVisible(QMouseEvent* event);
 
     bool _dependencyManagerIsSetup;
 
@@ -391,7 +388,7 @@ private:
     InputPluginList _activeInputPlugins;
 
     bool _activatingDisplayPlugin { false };
-    QMap<uint32_t, gpu::FramebufferPointer> _lockedFramebufferMap;
+    QMap<gpu::TexturePointer, gpu::FramebufferPointer> _lockedFramebufferMap;
 
     MainWindow* _window;
 
@@ -404,7 +401,6 @@ private:
     QElapsedTimer _timerStart;
     QElapsedTimer _lastTimeUpdated;
     float _lastInstantaneousFps { 0.0f };
-    float _lastUnsynchronizedFps { 0.0f };
 
     ShapeManager _shapeManager;
     PhysicalEntitySimulation _entitySimulation;
@@ -431,6 +427,7 @@ private:
     Camera _mirrorCamera;                        // Cammera for mirror view
     QRect _mirrorViewRect;
 
+    Setting::Handle<QString> _previousScriptLocation;
     Setting::Handle<float> _fieldOfView;
 
     float _scaleMirror;
@@ -451,7 +448,6 @@ private:
     NodeToOctreeSceneStats _octreeServerSceneStats;
     ControllerScriptingInterface* _controllerScriptingInterface{ nullptr };
     QPointer<LogDialog> _logDialog;
-    QPointer<SnapshotShareDialog> _snapshotShareDialog;
 
     FileLogger* _logger;
 
@@ -474,20 +470,18 @@ private:
     typedef bool (Application::* AcceptURLMethod)(const QString &);
     static const QHash<QString, AcceptURLMethod> _acceptedExtensions;
 
-    QList<QString> _domainConnectionRefusals;
     glm::uvec2 _renderResolution;
 
     int _maxOctreePPS = DEFAULT_MAX_OCTREE_PPS;
 
     quint64 _lastFaceTrackerUpdate;
 
-    render::ScenePointer _main3DScene{ new render::Scene() };
+    render::ScenePointer _main3DScene{ new render::Scene(glm::vec3(-0.5f * (float)TREE_SCALE), (float)TREE_SCALE) };
     render::EnginePointer _renderEngine{ new render::Engine() };
     gpu::ContextPointer _gpuContext; // initialized during window creation
 
     Overlays _overlays;
     ApplicationOverlay _applicationOverlay;
-    ApplicationCompositor _compositor;
     OverlayConductor _overlayConductor;
 
     DialogsManagerScriptingInterface* _dialogsManagerScriptingInterface = new DialogsManagerScriptingInterface();
@@ -510,6 +504,14 @@ private:
     int _avatarAttachmentRequest = 0;
 
     bool _settingsLoaded { false };
+    QTimer* _idleTimer { nullptr };
+
+    bool _fakedMouseEvent { false };
+
+    void checkChangeCursor();
+    mutable QMutex _changeCursorLock { QMutex::Recursive };
+    QCursor _desiredCursor{ Qt::BlankCursor };
+    bool _cursorNeedsChanging { false };
 };
 
 #endif // hifi_Application_h

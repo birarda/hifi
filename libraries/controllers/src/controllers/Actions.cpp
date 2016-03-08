@@ -61,6 +61,7 @@ namespace controller {
             makeButtonPair(Action::CONTEXT_MENU, "ContextMenu"),
             makeButtonPair(Action::TOGGLE_MUTE, "ToggleMute"),
             makeButtonPair(Action::CYCLE_CAMERA, "CycleCamera"),
+            makeButtonPair(Action::TOGGLE_OVERLAY, "ToggleOverlay"),
 
             makeAxisPair(Action::RETICLE_CLICK, "ReticleClick"),
             makeAxisPair(Action::RETICLE_X, "ReticleX"),
@@ -120,7 +121,7 @@ namespace controller {
         return availableInputs;
     }
 
-    void ActionsDevice::update(float deltaTime, bool jointsCaptured) {
+    void ActionsDevice::update(float deltaTime, const InputCalibrationData& inpuCalibrationData, bool jointsCaptured) {
     }
 
     void ActionsDevice::focusOutEvent() {

@@ -212,12 +212,23 @@ NetworkTexture::TextureLoaderFunc NetworkTexture::getTextureLoader() const {
             return TextureLoaderFunc(model::TextureUsage::createNormalTextureFromNormalImage);
             break;
         }
+        case ROUGHNESS_TEXTURE: {
+            return TextureLoaderFunc(model::TextureUsage::createRoughnessTextureFromImage);
+            break;
+        }
+        case GLOSS_TEXTURE: {
+            return TextureLoaderFunc(model::TextureUsage::createRoughnessTextureFromGlossImage);
+            break;
+        }
+        case SPECULAR_TEXTURE: {
+            return TextureLoaderFunc(model::TextureUsage::createMetallicTextureFromImage);
+            break;
+        }
         case CUSTOM_TEXTURE: {
             return _textureLoader;
             break;
         }
         case DEFAULT_TEXTURE:
-        case SPECULAR_TEXTURE:
         case EMISSIVE_TEXTURE:
         default: {
             return TextureLoaderFunc(model::TextureUsage::create2DTextureFromImage);
@@ -268,6 +279,12 @@ void ImageReader::listSupportedImageFormats() {
 }
 
 void ImageReader::run() {
+    auto originalPriority = QThread::currentThread()->priority();
+    if (originalPriority == QThread::InheritPriority) {
+        originalPriority = QThread::NormalPriority;
+    }
+    QThread::currentThread()->setPriority(QThread::LowPriority);
+
     auto texture = _texture.toStrongRef();
     if (!texture) {
         qCWarning(modelnetworking) << "Could not get strong ref";
@@ -306,6 +323,7 @@ void ImageReader::run() {
         Q_ARG(const QImage&, image),
         Q_ARG(void*, theTexture),
         Q_ARG(int, originalWidth), Q_ARG(int, originalHeight));
+    QThread::currentThread()->setPriority(originalPriority);
 }
 
 void NetworkTexture::setImage(const QImage& image, void* voidTexture, int originalWidth,
@@ -328,10 +346,6 @@ void NetworkTexture::setImage(const QImage& image, void* voidTexture, int origin
     
     finishedLoading(true);
 
-    imageLoaded(image);
-}
-
-void NetworkTexture::imageLoaded(const QImage& image) {
-    // nothing by default
+    emit networkTextureCreated(qWeakPointerCast<NetworkTexture, Resource> (_self));
 }
 

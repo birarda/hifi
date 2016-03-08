@@ -6,8 +6,8 @@ import "../../dialogs"
 PreferencesDialog {
     id: root
     objectName: "AvatarPreferencesDialog"
-    title: "Avatar Preferences"
-    showCategories: [ "Avatar Basics", "Avatar Tuning" ]
+    title: "Avatar Settings"
+    showCategories: [ "Avatar Basics", "Avatar Tuning", "Avatar Camera" ]
     property var settings: Settings {
         category: root.objectName
         property alias x: root.x

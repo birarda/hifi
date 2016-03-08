@@ -25,13 +25,17 @@ class PluginContainerProxy : public QObject, PluginContainer {
     virtual void showDisplayPluginsTools() override;
     virtual void requestReset() override;
     virtual bool makeRenderingContextCurrent() override;
-    virtual void releaseSceneTexture(uint32_t texture) override;
-    virtual void releaseOverlayTexture(uint32_t texture) override;
+    virtual void releaseSceneTexture(const gpu::TexturePointer& texture) override;
+    virtual void releaseOverlayTexture(const gpu::TexturePointer& texture) override;
     virtual GLWidget* getPrimaryWidget() override;
     virtual QWindow* getPrimaryWindow() override;
     virtual QOpenGLContext* getPrimaryContext() override;
     virtual bool isForeground() override;
     virtual const DisplayPlugin* getActiveDisplayPlugin() const override;
+
+    /// settings interface
+    virtual bool getBoolSetting(const QString& settingName, bool defaultValue) override;
+    virtual void setBoolSetting(const QString& settingName, bool value) override;
 
     QRect _savedGeometry{ 10, 120, 800, 600 };
     std::map<QString, QActionGroup*> _exclusiveGroups;

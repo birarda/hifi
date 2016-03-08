@@ -3,6 +3,8 @@
 #include <QFile>
 #include <QImage>
 
+#include <ColorUtils.h>
+
 #include <StreamHelpers.h>
 
 #include "sdf_text3D_vert.h"
@@ -234,6 +236,10 @@ void Font::setupGPU() {
                 gpu::State::SRC_ALPHA, gpu::State::BLEND_OP_ADD, gpu::State::INV_SRC_ALPHA,
                 gpu::State::FACTOR_ALPHA, gpu::State::BLEND_OP_ADD, gpu::State::ONE);
             _pipeline = gpu::Pipeline::create(program, state);
+
+            auto layeredState = std::make_shared<gpu::State>(state->getValues());
+            layeredState->setDepthTest(false);
+            _layeredPipeline = gpu::Pipeline::create(program, layeredState);
         }
 
         // Sanity checks
@@ -336,7 +342,7 @@ void Font::rebuildVertices(float x, float y, const QString& str, const glm::vec2
 }
 
 void Font::drawString(gpu::Batch& batch, float x, float y, const QString& str, const glm::vec4* color,
-                      EffectType effectType, const glm::vec2& bounds) {
+                      EffectType effectType, const glm::vec2& bounds, bool layered) {
     if (str == "") {
         return;
     }
@@ -347,10 +353,13 @@ void Font::drawString(gpu::Batch& batch, float x, float y, const QString& str, c
 
     setupGPU();
 
-    batch.setPipeline(_pipeline);
+    batch.setPipeline(layered ? _layeredPipeline : _pipeline);
     batch.setResourceTexture(_fontLoc, _texture);
     batch._glUniform1i(_outlineLoc, (effectType == OUTLINE_EFFECT));
-    batch._glUniform4fv(_colorLoc, 1, (const float*)color);
+    
+    // need the gamma corrected color here
+    glm::vec4 lrgba = glm::vec4(ColorUtils::toLinearVec3(glm::vec3(*color)), color->a);
+    batch._glUniform4fv(_colorLoc, 1, (const float*)&lrgba);
 
     batch.setInputFormat(_format);
     batch.setInputBuffer(0, _verticesBuffer, 0, _format->getChannels().at(0)._stride);

@@ -16,11 +16,14 @@ Windows.Window {
     closable: true
     visible: false
     width: 384; height: 640;
+    title: "Tools"
     property string newTabSource
     property alias tabView: tabView
     onParentChanged: {
-        x = desktop.width / 2 - width / 2;
-        y = desktop.height / 2 - height / 2;
+        if (parent) {
+            x = 120;
+            y = 120;
+        }
     }
 
     Settings {
@@ -103,6 +106,8 @@ Windows.Window {
         if (index < 0) {
             return;
         }
+        var tab = tabView.getTab(index);
+        tab.enabledChanged.disconnect(updateVisiblity);
         tabView.removeTab(index);
         console.log("Updating visibility based on child tab removed");
         updateVisiblity();
@@ -137,10 +142,7 @@ Windows.Window {
         }
 
         console.log("Updating visibility based on child tab added");
-        newTab.enabledChanged.connect(function() {
-            console.log("Updating visibility based on child tab enabled change");
-            updateVisiblity();
-        })
+        newTab.enabledChanged.connect(updateVisiblity)
         updateVisiblity();
         return newTab
     }

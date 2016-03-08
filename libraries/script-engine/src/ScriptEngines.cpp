@@ -34,8 +34,7 @@ ScriptsModel& getScriptsModel() {
 }
 
 ScriptEngines::ScriptEngines()
-    : _scriptsLocationHandle("scriptsLocation", DESKTOP_LOCATION),
-      _previousScriptLocation("LastScriptLocation", DESKTOP_LOCATION)
+    : _scriptsLocationHandle("scriptsLocation", DESKTOP_LOCATION)
 {
     _scriptsModelFilter.setSourceModel(&_scriptsModel);
     _scriptsModelFilter.sort(0, Qt::AscendingOrder);
@@ -43,13 +42,20 @@ ScriptEngines::ScriptEngines()
 }
 
 QString normalizeScriptUrl(const QString& rawScriptUrl) {
-    auto lower = rawScriptUrl.toLower();
     if (!rawScriptUrl.startsWith("http:") && !rawScriptUrl.startsWith("https:") &&  !rawScriptUrl.startsWith("atp:")) {
+#ifdef Q_OS_LINUX
+        if (rawScriptUrl.startsWith("file:")) {
+            return rawScriptUrl;
+        }
+        return QUrl::fromLocalFile(rawScriptUrl).toString();
+#else
         if (rawScriptUrl.startsWith("file:")) {
             return rawScriptUrl.toLower();
         }
         // Force lowercase on file scripts because of drive letter weirdness.
         return QUrl::fromLocalFile(rawScriptUrl).toString().toLower();
+#endif
+
     }
     return QUrl(rawScriptUrl).toString();
 }
@@ -444,15 +450,4 @@ void ScriptEngines::onScriptFinished(const QString& rawScriptUrl, ScriptEngine* 
 void ScriptEngines::onScriptEngineError(const QString& scriptFilename) {
     qCDebug(scriptengine) << "Application::loadScript(), script failed to load...";
     emit scriptLoadError(scriptFilename, "");
-}
-
-QString ScriptEngines::getPreviousScriptLocation() const {
-    return _previousScriptLocation.get();
-}
-
-void ScriptEngines::setPreviousScriptLocation(const QString& previousScriptLocation) {
-    if (_previousScriptLocation.get() != previousScriptLocation) {
-        _previousScriptLocation.set(previousScriptLocation);
-        emit previousScriptLocationChanged();
-    }
 }

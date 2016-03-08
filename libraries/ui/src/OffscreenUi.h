@@ -42,6 +42,13 @@ public:
     QQuickItem* getToolWindow();
 
 
+    // Message box compatibility
+    Q_INVOKABLE QMessageBox::StandardButton messageBox(QMessageBox::Icon icon, const QString& title, const QString& text, QMessageBox::StandardButtons buttons, QMessageBox::StandardButton defaultButton);
+    // Must be called from the main thread
+    QQuickItem* createMessageBox(QMessageBox::Icon icon, const QString& title, const QString& text, QMessageBox::StandardButtons buttons, QMessageBox::StandardButton defaultButton);
+    // Must be called from the main thread
+    Q_INVOKABLE int waitForMessageBoxResult(QQuickItem* messageBox);
+
     /// Same design as QMessageBox::critical(), will block, returns result
     static QMessageBox::StandardButton critical(void* ignored, const QString& title, const QString& text,
         QMessageBox::StandardButtons buttons = QMessageBox::Ok,
@@ -56,7 +63,7 @@ public:
     }
     /// Same design as QMessageBox::question(), will block, returns result
     static QMessageBox::StandardButton question(void* ignored, const QString& title, const QString& text,
-        QMessageBox::StandardButtons buttons = QMessageBox::Ok,
+        QMessageBox::StandardButtons buttons = QMessageBox::Yes | QMessageBox::No,
         QMessageBox::StandardButton defaultButton = QMessageBox::NoButton) {
         return question(title, text, buttons, defaultButton);
     }
@@ -80,20 +87,31 @@ public:
         QMessageBox::StandardButtons buttons = QMessageBox::Ok,
         QMessageBox::StandardButton defaultButton = QMessageBox::NoButton);
 
-    Q_INVOKABLE QMessageBox::StandardButton messageBox(QMessageBox::Icon icon, const QString& title, const QString& text, QMessageBox::StandardButtons buttons, QMessageBox::StandardButton defaultButton);
-    Q_INVOKABLE QVariant inputDialog(const QString& query, const QString& placeholderText = QString(), const QString& currentValue = QString());
+    Q_INVOKABLE QString fileOpenDialog(const QString &caption = QString(), const QString &dir = QString(), const QString &filter = QString(), QString *selectedFilter = 0, QFileDialog::Options options = 0);
+    Q_INVOKABLE QString fileSaveDialog(const QString &caption = QString(), const QString &dir = QString(), const QString &filter = QString(), QString *selectedFilter = 0, QFileDialog::Options options = 0);
 
-    // FIXME implement
-    static QVariant query(const QString& query, const QString& placeholderText = QString(), const QString& currentValue = QString());
-
-    // FIXME implement
     // Compatibility with QFileDialog::getOpenFileName
     static QString getOpenFileName(void* ignored, const QString &caption = QString(), const QString &dir = QString(), const QString &filter = QString(), QString *selectedFilter = 0, QFileDialog::Options options = 0);
+    // Compatibility with QFileDialog::getSaveFileName
+    static QString getSaveFileName(void* ignored, const QString &caption = QString(), const QString &dir = QString(), const QString &filter = QString(), QString *selectedFilter = 0, QFileDialog::Options options = 0);
+
+
+    // input dialog compatibility
+    Q_INVOKABLE QVariant inputDialog(const QString& title, const QString& label = QString(), const QVariant& current = QVariant());
+    QQuickItem* createInputDialog(const QString& title, const QString& label, const QVariant& current);
+    QVariant waitForInputDialogResult(QQuickItem* inputDialog);
 
     // Compatibility with QInputDialog::getText
     static QString getText(void* ignored, const QString & title, const QString & label, QLineEdit::EchoMode mode = QLineEdit::Normal, const QString & text = QString(), bool * ok = 0, Qt::WindowFlags flags = 0, Qt::InputMethodHints inputMethodHints = Qt::ImhNone);
+    // Compatibility with QInputDialog::getItem
+    static QString getItem(void *ignored, const QString & title, const QString & label, const QStringList & items, int current = 0, bool editable = true, bool * ok = 0, Qt::WindowFlags flags = 0, Qt::InputMethodHints inputMethodHints = Qt::ImhNone);
+
+signals:
+    void showDesktop();
 
 private:
+    QString fileDialog(const QVariantMap& properties);
+
     QQuickItem* _desktop { nullptr };
     QQuickItem* _toolWindow { nullptr };
 };

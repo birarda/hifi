@@ -28,6 +28,11 @@ public:
         init(menu, qmlObject);
     }
 
+    ~MenuUserData() {
+        _widget->setUserData(USER_DATA_ID, nullptr);
+        _qml->setUserData(USER_DATA_ID, nullptr);
+    }
+
     const QUuid uuid{ QUuid::createUuid() };
 
     static MenuUserData* forObject(QObject* object) {
@@ -37,12 +42,17 @@ public:
 private:
     MenuUserData(const MenuUserData&);
     void init(QObject* widgetObject, QObject* qmlObject) {
+        _widget = widgetObject;
+        _qml = qmlObject;
         widgetObject->setUserData(USER_DATA_ID, this);
         qmlObject->setUserData(USER_DATA_ID, this);
         qmlObject->setObjectName(uuid.toString());
         // Make sure we can find it again in the future
         Q_ASSERT(VrMenu::_instance->findMenuObject(uuid.toString()));
     }
+
+    QObject* _widget { nullptr };
+    QObject* _qml { nullptr };
 };
 
 const int MenuUserData::USER_DATA_ID = QObject::registerUserData();
@@ -114,8 +124,11 @@ void VrMenu::addMenu(QMenu* menu) {
     new MenuUserData(menu, result);
     auto menuAction = menu->menuAction();
     updateQmlItemFromAction(result, menuAction);
-    QObject::connect(menuAction, &QAction::changed, [=] {
+    auto connection = QObject::connect(menuAction, &QAction::changed, [=] {
         updateQmlItemFromAction(result, menuAction);
+    });
+    QObject::connect(qApp, &QCoreApplication::aboutToQuit, [=] {
+        QObject::disconnect(connection);
     });
 
 }
@@ -123,9 +136,13 @@ void VrMenu::addMenu(QMenu* menu) {
 void bindActionToQmlAction(QObject* qmlAction, QAction* action) {
     new MenuUserData(action, qmlAction);
     updateQmlItemFromAction(qmlAction, action);
-    QObject::connect(action, &QAction::changed, [=] {
+    auto connection = QObject::connect(action, &QAction::changed, [=] {
         updateQmlItemFromAction(qmlAction, action);
     });
+    QObject::connect(qApp, &QCoreApplication::aboutToQuit, [=] {
+        QObject::disconnect(connection);
+    });
+
     QObject::connect(action, &QAction::toggled, [=](bool checked) {
         qmlAction->setProperty("checked", checked);
     });
@@ -142,7 +159,6 @@ void VrMenu::addAction(QMenu* menu, QAction* action) {
     Q_ASSERT(menuQml);
     QQuickMenuItem* returnedValue { nullptr };
     
-    qDebug() << menuQml;
     bool invokeResult = QMetaObject::invokeMethod(menuQml, "addItem", Qt::DirectConnection,
         Q_RETURN_ARG(QQuickMenuItem*, returnedValue),
         Q_ARG(QString, action->text()));

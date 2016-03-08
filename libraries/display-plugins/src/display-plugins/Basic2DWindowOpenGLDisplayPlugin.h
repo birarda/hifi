@@ -24,18 +24,16 @@ public:
 
     virtual void activate() override;
 
-    virtual void submitSceneTexture(uint32_t frameIndex, uint32_t sceneTexture, const glm::uvec2& sceneSize) override;
+    virtual void submitSceneTexture(uint32_t frameIndex, const gpu::TexturePointer& sceneTexture) override;
 
     virtual void internalPresent() override;
 
     virtual bool isThrottled() const override;
 
 protected:
-    int getDesiredInterval() const;
     mutable bool _isThrottled = false;
 
 private:
-    void updateFramerate();
     static const QString NAME;
     QScreen* getFullscreenTarget();
     std::vector<QAction*> _framerateActions;

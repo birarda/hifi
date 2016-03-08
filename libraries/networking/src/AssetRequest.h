@@ -39,18 +39,21 @@ public:
         UnknownError
     };
 
-    AssetRequest(const QString& hash, const QString& extension);
+    AssetRequest(const QString& hash);
 
     Q_INVOKABLE void start();
 
     const QByteArray& getData() const { return _data; }
     const State& getState() const { return _state; }
     const Error& getError() const { return _error; }
-    QUrl getUrl() const { return ::getATPUrl(_hash, _extension); }
+    QUrl getUrl() const { return ::getATPUrl(_hash); }
 
 signals:
     void finished(AssetRequest* thisRequest);
     void progress(qint64 totalReceived, qint64 total);
+
+//private slots:
+    //void getAssetCallback(bool responseReceived, AssetServerError serverError, const QByteArray& data);
 
 private:
     State _state = NotStarted;
@@ -58,7 +61,6 @@ private:
     AssetInfo _info;
     uint64_t _totalReceived { 0 };
     QString _hash;
-    QString _extension;
     QByteArray _data;
     int _numPendingRequests { 0 };
 };

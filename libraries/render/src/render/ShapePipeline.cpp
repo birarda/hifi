@@ -17,6 +17,12 @@
 
 using namespace render;
 
+void ShapePipeline::prepare(gpu::Batch& batch) {
+    if (batchSetter) {
+        batchSetter(*this, batch);
+    }
+}
+
 ShapeKey::Filter::Builder::Builder() {
     _mask.set(OWN_PIPELINE);
     _mask.set(INVALID);
@@ -47,10 +53,12 @@ void ShapePlumber::addPipeline(const Filter& filter, const gpu::ShaderPointer& p
     gpu::Shader::BindingSet slotBindings;
     slotBindings.insert(gpu::Shader::Binding(std::string("skinClusterBuffer"), Slot::SKINNING_GPU));
     slotBindings.insert(gpu::Shader::Binding(std::string("materialBuffer"), Slot::MATERIAL_GPU));
-    slotBindings.insert(gpu::Shader::Binding(std::string("diffuseMap"), Slot::DIFFUSE_MAP));
+    slotBindings.insert(gpu::Shader::Binding(std::string("albedoMap"), Slot::ALBEDO_MAP));
+    slotBindings.insert(gpu::Shader::Binding(std::string("roughnessMap"), Slot::ROUGHNESS_MAP));
     slotBindings.insert(gpu::Shader::Binding(std::string("normalMap"), Slot::NORMAL_MAP));
-    slotBindings.insert(gpu::Shader::Binding(std::string("specularMap"), Slot::SPECULAR_MAP));
-    slotBindings.insert(gpu::Shader::Binding(std::string("emissiveMap"), Slot::LIGHTMAP_MAP));
+    slotBindings.insert(gpu::Shader::Binding(std::string("metallicMap"), Slot::METALLIC_MAP));
+    slotBindings.insert(gpu::Shader::Binding(std::string("emissiveMap"), Slot::EMISSIVE_LIGHTMAP_MAP));
+    slotBindings.insert(gpu::Shader::Binding(std::string("occlusionMap"), Slot::OCCLUSION_MAP));
     slotBindings.insert(gpu::Shader::Binding(std::string("lightBuffer"), Slot::LIGHT_BUFFER));
     slotBindings.insert(gpu::Shader::Binding(std::string("normalFittingMap"), Slot::NORMAL_FITTING_MAP));
 
@@ -60,10 +68,12 @@ void ShapePlumber::addPipeline(const Filter& filter, const gpu::ShaderPointer& p
     locations->texcoordMatrices = program->getUniforms().findLocation("texcoordMatrices");
     locations->emissiveParams = program->getUniforms().findLocation("emissiveParams");
     locations->normalFittingMapUnit = program->getTextures().findLocation("normalFittingMap");
-    locations->diffuseTextureUnit = program->getTextures().findLocation("diffuseMap");
+    locations->albedoTextureUnit = program->getTextures().findLocation("albedoMap");
+    locations->roughnessTextureUnit = program->getTextures().findLocation("roughnessMap");
     locations->normalTextureUnit = program->getTextures().findLocation("normalMap");
-    locations->specularTextureUnit = program->getTextures().findLocation("specularMap");
+    locations->metallicTextureUnit = program->getTextures().findLocation("metallicMap");
     locations->emissiveTextureUnit = program->getTextures().findLocation("emissiveMap");
+    locations->occlusionTextureUnit = program->getTextures().findLocation("occlusionMap");
     locations->skinClusterBufferUnit = program->getBuffers().findLocation("skinClusterBuffer");
     locations->materialBufferUnit = program->getBuffers().findLocation("materialBuffer");
     locations->lightBufferUnit = program->getBuffers().findLocation("lightBuffer");
@@ -90,13 +100,13 @@ const ShapePipelinePointer ShapePlumber::pickPipeline(RenderArgs* args, const Ke
     PipelinePointer shapePipeline(pipelineIterator->second);
     auto& batch = args->_batch;
 
+    // Setup the one pipeline (to rule them all)
+    batch->setPipeline(shapePipeline->pipeline);
+
     // Run the pipeline's BatchSetter on the passed in batch
     if (shapePipeline->batchSetter) {
         shapePipeline->batchSetter(*shapePipeline, *batch);
     }
-
-    // Setup the one pipeline (to rule them all)
-    batch->setPipeline(shapePipeline->pipeline);
 
     return shapePipeline;
 }
