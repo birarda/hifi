@@ -11,6 +11,7 @@
 #include <glm/gtx/quaternion.hpp>
 #include <gpu/Batch.h>
 
+#include <AudioClient.h>
 #include <NodeList.h>
 #include <recording/Deck.h>
 
@@ -71,10 +72,14 @@ void Head::reset() {
 }
 
 void Head::simulate(float deltaTime, bool isMine) {
+
+    // grab the audio loudness from the audio client
+    float audioLoudness = DependencyManager::get<AudioClient>()->getLastInputLoudness();
+
     //  Update audio trailing average for rendering facial animations
     const float AUDIO_AVERAGING_SECS = 0.05f;
     const float AUDIO_LONG_TERM_AVERAGING_SECS = 30.0f;
-    _averageLoudness = glm::mix(_averageLoudness, _audioLoudness, glm::min(deltaTime / AUDIO_AVERAGING_SECS, 1.0f));
+    _averageLoudness = glm::mix(_averageLoudness, audioLoudness, glm::min(deltaTime / AUDIO_AVERAGING_SECS, 1.0f));
 
     if (_longTermAverageLoudness == -1.0f) {
         _longTermAverageLoudness = _averageLoudness;
@@ -150,9 +155,10 @@ void Head::simulate(float deltaTime, bool isMine) {
         }
                                  
         //  Update audio attack data for facial animation (eyebrows and mouth)
+
         const float AUDIO_ATTACK_AVERAGING_RATE = 0.9f;
-        _audioAttack = AUDIO_ATTACK_AVERAGING_RATE * _audioAttack + (1.0f - AUDIO_ATTACK_AVERAGING_RATE) * fabs((_audioLoudness - _longTermAverageLoudness) - _lastLoudness);
-        _lastLoudness = (_audioLoudness - _longTermAverageLoudness);
+        _audioAttack = AUDIO_ATTACK_AVERAGING_RATE * _audioAttack + (1.0f - AUDIO_ATTACK_AVERAGING_RATE) * fabs((audioLoudness - _longTermAverageLoudness) - _lastLoudness);
+        _lastLoudness = (audioLoudness - _longTermAverageLoudness);
         
         const float BROW_LIFT_THRESHOLD = 100.0f;
         if (_audioAttack > BROW_LIFT_THRESHOLD) {
