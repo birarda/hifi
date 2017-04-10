@@ -564,7 +564,7 @@ Item {
 
     // Function body by Howard Stearns 2017-01-08
     function goToUserInDomain(avatarUuid) {
-        var avatar = AvatarList.getAvatarCopy(avatarUuid);
+        var avatar = AvatarList.getAvatar(avatarUuid);
         if (!avatar) {
             console.log("This avatar is no longer present. goToUserInDomain() failed.");
             return;
