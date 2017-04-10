@@ -955,13 +955,12 @@ FBXGeometry* FBXReader::extractFBXGeometry(const QVariantHash& mapping, const QU
                     QByteArray content;
                     foreach (const FBXNode& subobject, object.children) {
                         if (subobject.name == "RelativeFilename") {
-                            filepath = subobject.properties.at(0).toByteArray();
-                            filepath = filepath.replace('\\', '/');
-
+                            filepath = fixedTextureFilepath(subobject.properties.at(0).toByteArray(), url);
                         } else if (subobject.name == "Content" && !subobject.properties.isEmpty()) {
                             content = subobject.properties.at(0).toByteArray();
                         }
                     }
+
                     if (!content.isEmpty()) {
                         _textureContent.insert(filepath, content);
                     }
