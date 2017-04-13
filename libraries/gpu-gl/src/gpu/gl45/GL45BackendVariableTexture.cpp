@@ -92,6 +92,7 @@ TransferJob::TransferJob(const GL45VariableAllocationTexture& parent, uint16_t s
     type = texelFormat.type;
     auto mipSize = _parent._gpuObject.getStoredMipFaceSize(sourceMip, face);
 
+    qDebug() << "Inside TransferJob for sourceMip " << sourceMip << " " << QString::fromStdString(parent._source);
 
     if (0 == lines) {
         _transferSize = mipSize;
@@ -580,6 +581,7 @@ void GL45ResourceTexture::populateTransferQueue() {
         auto targetMip = sourceMip - _allocatedMip;
         auto mipDimensions = _gpuObject.evalMipDimensions(sourceMip);
         for (uint8_t face = 0; face < maxFace; ++face) {
+            qDebug() << "populateTransferQueue " << QString::fromStdString(_gpuObject.source()) << sourceMip << " " << targetMip;
             if (!_gpuObject.isStoredMipFaceAvailable(sourceMip, face)) {
                 continue;
             }

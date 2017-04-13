@@ -338,6 +338,7 @@ public:
 
     protected:
         std::string _filename;
+        //storage::FileStorage _cacheFile;
         ktx::KTXDescriptorPointer _ktxDescriptor;
         friend class Texture;
     };
