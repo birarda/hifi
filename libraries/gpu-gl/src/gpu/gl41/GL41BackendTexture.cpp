@@ -93,9 +93,15 @@ void GL41Texture::generateMips() const {
     (void)CHECK_GL_ERROR();
 }
 
-void GL41Texture::copyMipFaceLinesFromTexture(uint16_t mip, uint8_t face, const uvec3& size, uint32_t yOffset, GLenum format, GLenum type, const void* sourcePointer) const {
+void GL41Texture::copyMipFaceLinesFromTexture(uint16_t mip, uint8_t face, const uvec3& size, uint32_t yOffset, GLenum format, GLenum internalFormat, GLenum type, Size sourceSize, const void* sourcePointer) const {
     if (GL_TEXTURE_2D == _target) {
-        glTexSubImage2D(_target, mip, 0, yOffset, size.x, size.y, format, type, sourcePointer);
+        if (GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT == internalFormat) {
+            qCDebug(gpugllogging) << "Compressed mipData level=" << mip << " face=" << (int)face << " for texture " << _gpuObject.source().c_str();
+            qCDebug(gpugllogging) << "Compressed mipData" << internalFormat << size.x << size.y << sourceSize << sourcePointer;
+            glCompressedTexImage2D(_target, mip, internalFormat, size.x, size.y, 0, sourceSize, sourcePointer);
+        } else {
+            glTexSubImage2D(_target, mip, 0, yOffset, size.x, size.y, format, type, sourcePointer);
+        }
     } else if (GL_TEXTURE_CUBE_MAP == _target) {
         auto target = GLTexture::CUBE_FACE_LAYOUT[face];
         glTexSubImage2D(target, mip, 0, yOffset, size.x, size.y, format, type, sourcePointer);
@@ -111,9 +117,10 @@ void GL41Texture::copyMipFaceFromTexture(uint16_t sourceMip, uint16_t targetMip,
     }
     auto size = _gpuObject.evalMipDimensions(sourceMip);
     auto mipData = _gpuObject.accessStoredMipFace(sourceMip, face);
+    auto mipSize = _gpuObject.getStoredMipFaceSize(sourceMip, face);
     if (mipData) {
         GLTexelFormat texelFormat = GLTexelFormat::evalGLTexelFormat(_gpuObject.getTexelFormat(), _gpuObject.getStoredMipFormat());
-        copyMipFaceLinesFromTexture(targetMip, face, size, 0, texelFormat.format, texelFormat.type, mipData->readData());
+        copyMipFaceLinesFromTexture(targetMip, face, size, 0, texelFormat.format, texelFormat.internalFormat, texelFormat.type, mipSize, mipData->readData());
     } else {
         qCDebug(gpugllogging) << "Missing mipData level=" << sourceMip << " face=" << (int)face << " for texture " << _gpuObject.source().c_str();
     }

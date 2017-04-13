@@ -46,7 +46,7 @@ public:
         GL41Texture(const std::weak_ptr<GLBackend>& backend, const Texture& texture);
         void generateMips() const override;
         void copyMipFaceFromTexture(uint16_t sourceMip, uint16_t targetMip, uint8_t face) const;
-        void copyMipFaceLinesFromTexture(uint16_t mip, uint8_t face, const uvec3& size, uint32_t yOffset, GLenum format, GLenum type, const void* sourcePointer) const;
+        void copyMipFaceLinesFromTexture(uint16_t mip, uint8_t face, const uvec3& size, uint32_t yOffset, GLenum format, GLenum internalFormat, GLenum type, Size sourceSize, const void* sourcePointer) const;
         virtual void syncSampler() const;
 
         void withPreservedTexture(std::function<void()> f) const;
