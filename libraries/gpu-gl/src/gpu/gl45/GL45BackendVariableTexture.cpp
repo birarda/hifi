@@ -84,9 +84,11 @@ TransferJob::TransferJob(const GL45VariableAllocationTexture& parent, uint16_t s
 
     auto transferDimensions = _parent._gpuObject.evalMipDimensions(sourceMip);
     GLenum format;
+    GLenum internalFormat;
     GLenum type;
     GLTexelFormat texelFormat = GLTexelFormat::evalGLTexelFormat(_parent._gpuObject.getTexelFormat(), _parent._gpuObject.getStoredMipFormat());
     format = texelFormat.format;
+    internalFormat = texelFormat.internalFormat;
     type = texelFormat.type;
     auto mipSize = _parent._gpuObject.getStoredMipFaceSize(sourceMip, face);
 
@@ -117,7 +119,7 @@ TransferJob::TransferJob(const GL45VariableAllocationTexture& parent, uint16_t s
     Backend::updateTextureTransferPendingSize(0, _transferSize);
 
     _transferLambda = [=] {
-        _parent.copyMipFaceLinesFromTexture(targetMip, face, transferDimensions, lineOffset, format, type, _buffer.data());
+        _parent.copyMipFaceLinesFromTexture(targetMip, face, transferDimensions, lineOffset, format, internalFormat, type, _buffer.size(), _buffer.data());
         std::vector<uint8_t> emptyVector;
         _buffer.swap(emptyVector);
     };
