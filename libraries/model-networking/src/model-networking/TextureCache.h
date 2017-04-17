@@ -40,7 +40,7 @@ public:
 };
 
 /// A texture loaded from the network.
-class NetworkTexture : public Resource, public Texture {
+class NetworkTexture : public Resource, public Texture, public gpu::Texture::MipInterestListener {
     Q_OBJECT
 
 public:
@@ -55,6 +55,9 @@ public:
     gpu::TextureType getTextureType() const { return _type; }
 
     gpu::TexturePointer getFallbackTexture() const;
+
+    void handleMipInterestCallback(uint16_t level) override;
+    Q_INVOKABLE void handleMipInterestLevel(uint16_t level);
 
 signals:
     void networkTextureCreated(const QWeakPointer<NetworkTexture>& self);
@@ -76,6 +79,8 @@ protected:
     Q_INVOKABLE void loadContent(const QByteArray& content);
     Q_INVOKABLE void setImage(gpu::TexturePointer texture, int originalWidth, int originalHeight);
 
+    void startRequestForNextMipLevel();
+
     void startMipRangeRequest(uint16_t low, uint16_t high);
     void maybeCreateKTX();
 
@@ -91,9 +96,7 @@ private:
         DONE_LOADING 
     };
 
-
     bool _initialKtxLoaded { false };
-    //KTXLoadState _ktxLoadState;
     KTXFilePointer _file;
     static const uint16_t NULL_MIP_LEVEL;
     bool _sourceIsKTX { false };
@@ -101,6 +104,8 @@ private:
     std::pair<uint16_t, uint16_t> _ktxMipLevelRangeInFlight{ NULL_MIP_LEVEL, NULL_MIP_LEVEL };
     ResourceRequest* _ktxHeaderRequest { nullptr };
     ResourceRequest* _ktxMipRequest { nullptr };
+    uint16_t _lowestRequestedMipLevel { NULL_MIP_LEVEL };
+    uint16_t _lowestKnownPopulatedMip { NULL_MIP_LEVEL };
     QByteArray _ktxHeaderData;
     QByteArray _ktxHighMipData;
 
