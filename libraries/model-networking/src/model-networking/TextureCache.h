@@ -45,6 +45,7 @@ class NetworkTexture : public Resource, public Texture, public gpu::Texture::Mip
 
 public:
     NetworkTexture(const QUrl& url, gpu::TextureType type, const QByteArray& content, int maxNumPixels);
+    NetworkTexture::~NetworkTexture() override;
 
     QString getType() const override { return "NetworkTexture"; }
 
@@ -90,13 +91,6 @@ private:
 
     gpu::TextureType _type;
 
-    enum KTXLoadState {
-        LOADING_HEADER,
-        LOADING_LOWEST_SIX,
-        DONE_LOADING 
-    };
-
-    bool _initialKtxLoaded { false };
     KTXFilePointer _file;
     static const uint16_t NULL_MIP_LEVEL;
     bool _sourceIsKTX { false };
@@ -104,6 +98,8 @@ private:
     std::pair<uint16_t, uint16_t> _ktxMipLevelRangeInFlight{ NULL_MIP_LEVEL, NULL_MIP_LEVEL };
     ResourceRequest* _ktxHeaderRequest { nullptr };
     ResourceRequest* _ktxMipRequest { nullptr };
+    bool _headerRequestFinished{ false };
+    bool _highMipRequestFinished{ false };
     uint16_t _lowestRequestedMipLevel { NULL_MIP_LEVEL };
     uint16_t _lowestKnownPopulatedMip { NULL_MIP_LEVEL };
     QByteArray _ktxHeaderData;
