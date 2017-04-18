@@ -408,7 +408,7 @@ void NetworkTexture::startRequestForNextMipLevel() {
         setLoadPriority(this, _lowestKnownPopulatedMip);
 
         init();
-        ResourceCache::attemptRequest(_self);
+        TextureCache::attemptRequest(_self);
     }
 }
 
@@ -459,7 +459,7 @@ void NetworkTexture::ktxMipRequestFinished() {
         _ktxHighMipRequestFinished = true;
         maybeHandleFinishedInitialLoad();
     } else if (_ktxResourceState == REQUESTING_MIP) {
-        ResourceCache::requestCompleted(_self);
+        TextureCache::requestCompleted(_self);
 
         if (_ktxMipRequest->getResult() == ResourceRequest::Success) {
             Q_ASSERT(_ktxMipLevelRangeInFlight.second - _ktxMipLevelRangeInFlight.first == 0);
