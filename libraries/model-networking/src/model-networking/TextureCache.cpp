@@ -354,6 +354,7 @@ void NetworkTexture::makeRequest() {
 
         if (!_ktxHeaderRequest) {
             //qCDebug(networking).noquote() << "Failed to get request for" << _url.toDisplayString();
+
             PROFILE_ASYNC_END(resource, "Resource:" + getType(), QString::number(_requestID));
             return;
         }
@@ -490,7 +491,7 @@ void NetworkTexture::maybeHandleFinishedInitialLoad() {
 
     if (_ktxHeaderRequestFinished && _ktxHighMipRequestFinished) {
 
-        ResourceCache::requestCompleted(_self);
+        TextureCache::requestCompleted(_self);
 
         if (_ktxHeaderRequest->getResult() != ResourceRequest::Success || _ktxMipRequest->getResult() != ResourceRequest::Success) {
             if (handleFailedRequest(_ktxMipRequest->getResult())) {
