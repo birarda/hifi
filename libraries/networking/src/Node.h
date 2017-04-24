@@ -106,7 +106,30 @@ private:
 
 Q_DECLARE_METATYPE(Node*)
 
-typedef QSharedPointer<Node> SharedNodePointer;
+class SharedNodePointer : public QSharedPointer<Node> {
+public:
+    SharedNodePointer() : QSharedPointer<Node>() {
+
+    }
+
+    SharedNodePointer(const QSharedPointer<Node>& other) : QSharedPointer<Node>(other) {
+
+    }
+
+    SharedNodePointer(const QWeakPointer<Node>& other) : QSharedPointer<Node>(other) {
+
+    }
+
+    SharedNodePointer(Node* node) : QSharedPointer<Node>(node, &QObject::deleteLater) {
+        qDebug() << "Ctor for" << node;
+    }
+
+    ~SharedNodePointer() {
+        if (data()) {
+            qDebug() << "Dtor for" << data();
+        }
+    }
+};
 Q_DECLARE_METATYPE(SharedNodePointer)
 
 namespace std {

@@ -592,7 +592,7 @@ SharedNodePointer LimitedNodeList::addOrUpdateNode(const QUuid& uuid, NodeType_t
             LimitedNodeList::flagTimeForConnectionStep(LimitedNodeList::AddedAudioMixer);
         }
 
-        SharedNodePointer newNodePointer(newNode, &QObject::deleteLater);
+        SharedNodePointer newNodePointer(newNode);
 
         // if this is a solo node type, we assume that the DS has replaced its assignment and we should kill the previous node
         if (SOLO_NODE_TYPES.count(newNode->getType())) {
