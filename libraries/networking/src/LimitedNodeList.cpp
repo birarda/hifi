@@ -624,19 +624,24 @@ SharedNodePointer LimitedNodeList::addOrUpdateNode(const QUuid& uuid, NodeType_t
 
         qCDebug(networking) << "Added" << *newNode;
 
+        // we don't want the lambdas below to hold strong references, so we take a weak pointer here
+        auto weakPtr = newNodePointer.toWeakRef();
+
         emit nodeAdded(newNodePointer);
         if (newNodePointer->getActiveSocket()) {
             emit nodeActivated(newNodePointer);
         } else {
-            connect(newNodePointer.data(), &NetworkPeer::socketActivated, this, [=] {
-                emit nodeActivated(newNodePointer);
-                disconnect(newNodePointer.data(), &NetworkPeer::socketActivated, this, 0);
+            connect(newNodePointer.data(), &NetworkPeer::socketActivated, this, [this, weakPtr] {
+                auto nodePointer = weakPtr.lock();
+                if (nodePointer) {
+                    emit nodeActivated(nodePointer);
+                    disconnect(nodePointer.data(), &NetworkPeer::socketActivated, this, 0);
+                }
             });
         }
 
         // Signal when a socket changes, so we can start the hole punch over.
-        auto weakPtr = newNodePointer.toWeakRef(); // We don't want the lambda to hold a strong ref
-        connect(newNodePointer.data(), &NetworkPeer::socketUpdated, this, [=] {
+        connect(newNodePointer.data(), &NetworkPeer::socketUpdated, this, [this, weakPtr] {
             emit nodeSocketUpdated(weakPtr);
         });
 
