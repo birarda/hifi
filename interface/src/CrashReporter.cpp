@@ -21,6 +21,7 @@
 #include <csignal>
 #include <QDebug>
 
+#include "networking/ClosureEventSender.h"
 
 #pragma comment(lib, "Dbghelp.lib")
 
@@ -104,12 +105,21 @@ void printStackTrace(ULONG framesToSkip = 1) {
     }
 }
 
+void possiblySendCrashEvent() {
+    // Block and send a crash event, if UserActivityLogging is enabled
+    DependencyManager::get<ClosureEventSender>()->sendCrashEventSync();
+}
+
 void handleSignal(int signal) {
+    possiblySendCrashEvent();
+
     // Throw so BugSplat can handle
     throw(signal);
 }
 
 void __cdecl handlePureVirtualCall() {
+    possiblySendCrashEvent();
+
     qWarning() << "Pure virtual function call detected";
     printStackTrace(2);
     // Throw so BugSplat can handle
@@ -118,11 +128,15 @@ void __cdecl handlePureVirtualCall() {
 
 void handleInvalidParameter(const wchar_t * expression, const wchar_t * function, const wchar_t * file,
                             unsigned int line, uintptr_t pReserved ) {
+    possiblySendCrashEvent();
+
     // Throw so BugSplat can handle
     throw("ERROR: Invalid parameter");
 }
 
 int handleNewError(size_t size) {
+    possiblySendCrashEvent();
+    
     // Throw so BugSplat can handle
     throw("ERROR: Errors calling new");
 }

@@ -12,6 +12,7 @@
 #include <QtCore/QDateTime>
 #include <QtCore/QEventLoop>
 #include <QtCore/QJsonDocument>
+#include <QtCore/QTimer>
 #include <QtNetwork/QNetworkReply>
 
 #include <AccountManager.h>
@@ -68,6 +69,35 @@ void CloseEventSender::sendQuitEventAsync() {
     }
 }
 
+const int CLOSURE_EVENT_TIMEOUT_MS = 5000;
+
+void CloseEventSender::sendCrashEventSync() {
+    if (UserActivityLogger::getInstance().isEnabled()) {
+        QNetworkReply* reply = replyForAction("crash");
+
+        // use an event loop to block and wait for a response from the metaverse API
+        QEventLoop eventLoop;
+        connect(reply, &QNetworkReply::finished, &eventLoop, &QEventLoop::quit);
+
+        // use a QTimer to cause an eventual timeout of the request
+        QTimer eventTimeout;
+        connect(&eventTimeout, &QTimer::timeout, &eventLoop, &QEventLoop::quit);
+        eventTimeout.start(CLOSURE_EVENT_TIMEOUT_MS);
+
+        if (!reply->isFinished()) {
+            eventLoop.exec();
+        }
+
+        if (reply->error() == QNetworkReply::NoError) {
+            qCDebug(networking) << "Crash event sent successfully";
+        } else {
+            qCDebug(networking) << "Failed to send crash event -" << reply->errorString();
+        }
+
+        reply->deleteLater();
+    }
+}
+
 void CloseEventSender::handleQuitEventFinished() {
     _hasFinishedQuitEvent = true;
 
@@ -82,7 +112,6 @@ void CloseEventSender::handleQuitEventFinished() {
 }
 
 bool CloseEventSender::hasTimedOutQuitEvent() {
-    const int CLOSURE_EVENT_TIMEOUT_MS = 5000;
     return _quitEventStartTimestamp != 0
         && QDateTime::currentMSecsSinceEpoch() - _quitEventStartTimestamp > CLOSURE_EVENT_TIMEOUT_MS;
 }

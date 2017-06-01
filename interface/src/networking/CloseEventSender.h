@@ -27,6 +27,8 @@ public:
     bool hasTimedOutQuitEvent();
     bool hasFinishedQuitEvent() { return _hasFinishedQuitEvent; }
 
+    void sendCrashEventSync();
+
 public slots:
     void sendQuitEventAsync();
 
