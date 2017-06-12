@@ -39,7 +39,7 @@ class Node : public NetworkPeer {
 public:
     Node(const QUuid& uuid, NodeType_t type,
          const HifiSockAddr& publicSocket, const HifiSockAddr& localSocket,
-         const NodePermissions& permissions, const QUuid& connectionSecret = QUuid(),
+         const NodePermissions& permissions, bool isReplicated, const QUuid& connectionSecret = QUuid(),
          QObject* parent = 0);
 
     bool operator==(const Node& otherNode) const { return _uuid == otherNode._uuid; }
@@ -47,6 +47,9 @@ public:
 
     char getType() const { return _type; }
     void setType(char type);
+
+    bool isReplicated() const { return _isReplicated; }
+    void setIsReplicated(bool isReplicated) { _isReplicated = isReplicated; }
 
     const QUuid& getConnectionSecret() const { return _connectionSecret; }
     void setConnectionSecret(const QUuid& connectionSecret) { _connectionSecret = connectionSecret; }
@@ -97,6 +100,7 @@ private:
     QMutex _mutex;
     MovingPercentile _clockSkewMovingPercentile;
     NodePermissions _permissions;
+    bool _isReplicated { false };
     tbb::concurrent_unordered_set<QUuid, UUIDHasher> _ignoredNodeIDSet;
     mutable QReadWriteLock _ignoredNodeIDSetLock;
 
