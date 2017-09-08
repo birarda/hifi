@@ -250,28 +250,33 @@ QString FBXBaker::createBakedTextureFileName(const QFileInfo& textureFileInfo) {
     return bakedTextureFileName;
 }
 
-QUrl FBXBaker::getTextureURL(const QFileInfo& textureFileInfo, QString relativeFileName) {
+QUrl FBXBaker::getTextureURL(const QFileInfo& textureFileInfo, QString relativeFileName, bool wasEmbedded) {
     QUrl urlToTexture;
 
-    if (textureFileInfo.exists() && textureFileInfo.isFile()) {
-        // set the texture URL to the local texture that we have confirmed exists
-        urlToTexture = QUrl::fromLocalFile(textureFileInfo.absoluteFilePath());
+    // first check if it the RelativePath to the texture in the FBX was relative
+    auto apparentRelativePath = QFileInfo(relativeFileName.replace("\\", "/"));
+
+    if (wasEmbedded) {
+        // this is an embedded texture - put it in a folder with the name of the FBX file beside the FBX
+        urlToTexture = _fbxURL.resolved(_fbxURL.fileName() + "/" + apparentRelativePath.fileName());
     } else {
-        // external texture that we'll need to download or find
-
-        // first check if it the RelativePath to the texture in the FBX was relative
-        auto apparentRelativePath = QFileInfo(relativeFileName.replace("\\", "/"));
-
-        // this is a relative file path which will require different handling
-        // depending on the location of the original FBX
-        if (_fbxURL.isLocalFile() && apparentRelativePath.exists() && apparentRelativePath.isFile()) {
-            // the absolute path we ran into for the texture in the FBX exists on this machine
-            // so use that file
-            urlToTexture = QUrl::fromLocalFile(apparentRelativePath.absoluteFilePath());
+        if (textureFileInfo.exists() && textureFileInfo.isFile()) {
+            // set the texture URL to the local texture that we have confirmed exists
+            urlToTexture = QUrl::fromLocalFile(textureFileInfo.absoluteFilePath());
         } else {
-            // we didn't find the texture on this machine at the absolute path
-            // so assume that it is right beside the FBX to match the behaviour of interface
-            urlToTexture = _fbxURL.resolved(apparentRelativePath.fileName());
+            // external texture that we'll need to download or find
+
+            // this is a relative file path which will require different handling
+            // depending on the location of the original FBX
+            if (_fbxURL.isLocalFile() && apparentRelativePath.exists() && apparentRelativePath.isFile()) {
+                // the absolute path we ran into for the texture in the FBX exists on this machine
+                // so use that file
+                urlToTexture = QUrl::fromLocalFile(apparentRelativePath.absoluteFilePath());
+            } else {
+                // we didn't find the texture on this machine at the absolute path
+                // so assume that it is right beside the FBX to match the behaviour of interface
+                urlToTexture = _fbxURL.resolved(apparentRelativePath.fileName());
+            }
         }
     }
 
@@ -342,8 +347,13 @@ void FBXBaker::rewriteAndBakeSceneTextures() {
                                 qCDebug(model_baking).noquote() << "Re-mapping" << fbxTextureFileName
                                     << "to" << bakedTextureFileName;
 
+
+                                // check if this was an embedded texture we have already have in-memory content for
+                                auto textureContent = _textureContent.value(fbxTextureFileName.toLocal8Bit());
+
                                 // figure out the URL to this texture, embedded or external
-                                auto urlToTexture = getTextureURL(textureFileInfo, fbxTextureFileName);
+                                auto urlToTexture = getTextureURL(textureFileInfo, fbxTextureFileName,
+                                                                  !textureContent.isNull());
 
                                 // write the new filename into the FBX scene
                                 textureChild.properties[0] = bakedTextureFileName.toLocal8Bit();
@@ -354,9 +364,6 @@ void FBXBaker::rewriteAndBakeSceneTextures() {
                                     // texture type from the loaded materials
                                     QString textureID { object->properties[0].toByteArray() };
                                     auto textureType = textureTypes[textureID];
-
-                                    // check if this was an embedded texture we have already have in-memory content for
-                                    auto textureContent = _textureContent.value(fbxTextureFileName.toLocal8Bit());
 
                                     // bake this texture asynchronously
                                     bakeTexture(urlToTexture, textureType, _bakedOutputDir, textureContent);
@@ -409,12 +416,10 @@ void FBXBaker::handleBakedTexture() {
 
                     // use the path to the texture being baked to determine if this was an embedded or a linked texture
 
-                    // it is embeddded if the texure being baked was inside the original output folder
-                    // since that is where the FBX SDK places the .fbm folder it generates when importing the FBX
+                    // it is embeddded if the texure being baked was inside the path of the FBX file
+                    // since that is the URL we generate for embedded textures
 
-                    auto originalOutputFolder = QUrl::fromLocalFile(_originalOutputDir);
-
-                    if (!originalOutputFolder.isParentOf(bakedTexture->getTextureURL())) {
+                    if (!_fbxURL.isParentOf(bakedTexture->getTextureURL())) {
                         // for linked textures we want to save a copy of original texture beside the original FBX
 
                         qCDebug(model_baking) << "Saving original texture for" << bakedTexture->getTextureURL();

@@ -65,7 +65,7 @@ private:
     void checkIfTexturesFinished();
 
     QString createBakedTextureFileName(const QFileInfo& textureFileInfo);
-    QUrl getTextureURL(const QFileInfo& textureFileInfo, QString relativeFileName);
+    QUrl getTextureURL(const QFileInfo& textureFileInfo, QString relativeFileName, bool wasEmbedded);
 
     void bakeTexture(const QUrl& textureURL, image::TextureUsage::Type textureType, const QDir& outputDir,
                      const QByteArray& textureContent = QByteArray());
