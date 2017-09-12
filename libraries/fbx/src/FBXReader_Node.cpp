@@ -24,6 +24,13 @@
 #include <shared/NsightHelpers.h>
 #include "ModelFormatLogging.h"
 
+#include <fstream>
+#include "draco\io\obj_decoder.h"
+#include "draco\compression\decode.h"
+#include "draco\io\obj_encoder.h"
+
+
+
 template<class T> int streamSize() {
     return sizeof(T);
 }
@@ -58,7 +65,8 @@ template<class T> QVariant readBinaryArray(QDataStream& in, int& position) {
                 (unsigned int)arrayData.size() != (sizeof(T) * arrayLength)) { // answers empty byte array if corrupt
                 throw QString("corrupt fbx file");
             }
-        } else {
+        }
+        else {
             arrayData.resize(sizeof(T) * arrayLength);
             position += sizeof(T) * arrayLength;
             in.readRawData(arrayData.data(), arrayData.size());
@@ -67,7 +75,8 @@ template<class T> QVariant readBinaryArray(QDataStream& in, int& position) {
         if (arrayData.size() > 0) {
             memcpy(&values[0], arrayData.constData(), arrayData.size());
         }
-    } else {
+    }
+    else {
         values.reserve(arrayLength);
         const unsigned int DEFLATE_ENCODING = 1;
         if (encoding == DEFLATE_ENCODING) {
@@ -88,7 +97,8 @@ template<class T> QVariant readBinaryArray(QDataStream& in, int& position) {
                 uncompressedIn >> value;
                 values.append(value);
             }
-        } else {
+        }
+        else {
             for (quint32 i = 0; i < arrayLength; i++) {
                 T value;
                 in >> value;
@@ -100,79 +110,99 @@ template<class T> QVariant readBinaryArray(QDataStream& in, int& position) {
     return QVariant::fromValue(values);
 }
 
-QVariant parseBinaryFBXProperty(QDataStream& in, int& position) {
+QVariant parseBinaryFBXProperty(QDataStream& in, int& position, FBXNode* node) {
     char ch;
+    static FBXNode* dracoNode = nullptr;
     in.device()->getChar(&ch);
     position++;
     switch (ch) {
-        case 'Y': {
-            qint16 value;
-            in >> value;
-            position += sizeof(qint16);
-            return QVariant::fromValue(value);
+    case 'Y': {
+        qint16 value;
+        in >> value;
+        position += sizeof(qint16);
+        return QVariant::fromValue(value);
+    }
+    case 'C': {
+        bool value;
+        in >> value;
+        position++;
+        return QVariant::fromValue(value);
+    }
+    case 'I': {
+        qint32 value;
+        in >> value;
+        position += sizeof(qint32);
+        return QVariant::fromValue(value);
+    }
+    case 'F': {
+        float value;
+        in >> value;
+        position += sizeof(float);
+        return QVariant::fromValue(value);
+    }
+    case 'D': {
+        double value;
+        in >> value;
+        position += sizeof(double);
+        return QVariant::fromValue(value);
+    }
+    case 'L': {
+        qint64 value;
+        in >> value;
+        position += sizeof(qint64);
+        return QVariant::fromValue(value);
+    }
+    case 'f': {
+        return readBinaryArray<float>(in, position);
+    }
+    case 'd': {
+        return readBinaryArray<double>(in, position);
+    }
+    case 'l': {
+        return readBinaryArray<qint64>(in, position);
+    }
+    case 'i': {
+        return readBinaryArray<qint32>(in, position);
+    }
+    case 'b': {
+        return readBinaryArray<bool>(in, position);
+    }
+    case 'S':
+    case 'R': {
+        quint32 length;
+        in >> length;
+        position += sizeof(quint32) + length;
+        auto property  = QVariant::fromValue(in.device()->read(length));
+        
+        /*auto tempArray = property.value<QByteArray>();
+        if (tempArray == "DracoProperty") {
+            dracoNode = node;
+            qCDebug(modelformat) << "DracoNode" << dracoNode->name;
         }
-        case 'C': {
-            bool value;
-            in >> value;
-            position++;
-            return QVariant::fromValue(value);
-        }
-        case 'I': {
-            qint32 value;
-            in >> value;
-            position += sizeof(qint32);
-            return QVariant::fromValue(value);
-        }
-        case 'F': {
-            float value;
-            in >> value;
-            position += sizeof(float);
-            return QVariant::fromValue(value);
-        }
-        case 'D': {
-            double value;
-            in >> value;
-            position += sizeof(double);
-            return QVariant::fromValue(value);
-        }
-        case 'L': {
-            qint64 value;
-            in >> value;
-            position += sizeof(qint64);
-            return QVariant::fromValue(value);
-        }
-        case 'f': {
-            return readBinaryArray<float>(in, position);
-        }
-        case 'd': {
-            return readBinaryArray<double>(in, position);
-        }
-        case 'l': {
-            return readBinaryArray<qint64>(in, position);
-        }
-        case 'i': {
-            return readBinaryArray<qint32>(in, position);
-        }
-        case 'b': {
-            return readBinaryArray<bool>(in, position);
-        }
-        case 'S':
-        case 'R': {
-            quint32 length;
-            in >> length;
-            position += sizeof(quint32) + length;
-            return QVariant::fromValue(in.device()->read(length));
-        }
-        default:
-            throw QString("Unknown property type: ") + ch;
+
+        if (tempArray.indexOf("DRACO") != -1) {
+            dracoNode->dracoArray = tempArray;
+            dracoNode->isDracoNode = true;
+        }*/
+
+        return property;
+    }
+    default:
+        throw QString("Unknown property type: ") + ch;
     }
 }
+
+//void FBXReader::setDracoArray(QByteArray array) {
+//    FBXReader::dracoArray = array;
+//}
 
 FBXNode parseBinaryFBXNode(QDataStream& in, int& position, bool has64BitPositions = false) {
     qint64 endOffset;
     quint64 propertyCount;
     quint64 propertyListLength;
     quint8 nameLength;
+    /*static QByteArray tempArray1;
+    static FBXNode* node1 = nullptr;*/
 
     // FBX 2016 and beyond uses 64bit positions in the node headers, pre-2016 used 32bit values
     // our code generally doesn't care about the size that much, so we will use 64bit values
@@ -183,7 +213,8 @@ FBXNode parseBinaryFBXNode(QDataStream& in, int& position, bool has64BitPosition
         in >> propertyCount;
         in >> propertyListLength;
         position += sizeof(quint64) * 3;
-    } else {
+    }
+    else {
         qint32 tempEndOffset;
         quint32 tempPropertyCount;
         quint32 tempPropertyListLength;
@@ -206,9 +237,9 @@ FBXNode parseBinaryFBXNode(QDataStream& in, int& position, bool has64BitPosition
     }
     node.name = in.device()->read(nameLength);
     position += nameLength;
-
+    
     for (quint32 i = 0; i < propertyCount; i++) {
-        node.properties.append(parseBinaryFBXProperty(in, position));
+        node.properties.append(parseBinaryFBXProperty(in, position, &node));
     }
 
     while (endOffset > position) {
@@ -216,8 +247,10 @@ FBXNode parseBinaryFBXNode(QDataStream& in, int& position, bool has64BitPosition
         if (child.name.isNull()) {
             return node;
 
-        } else {
+        }
+        else {
             node.children.append(child);
+
         }
     }
 
@@ -261,42 +294,42 @@ int Tokenizer::nextToken() {
             continue; // skip whitespace
         }
         switch (ch) {
-            case ';':
-                _device->readLine(); // skip the comment
-                break;
+        case ';':
+            _device->readLine(); // skip the comment
+            break;
 
-            case ':':
-            case '{':
-            case '}':
-            case ',':
-                return ch; // special punctuation
+        case ':':
+        case '{':
+        case '}':
+        case ',':
+            return ch; // special punctuation
 
-            case '\"':
-                _datum = "";
-                while (_device->getChar(&ch)) {
-                    if (ch == '\"') { // end on closing quote
-                        break;
-                    }
-                    if (ch == '\\') { // handle escaped quotes
-                        if (_device->getChar(&ch) && ch != '\"') {
-                            _datum.append('\\');
-                        }
-                    }
-                    _datum.append(ch);
+        case '\"':
+            _datum = "";
+            while (_device->getChar(&ch)) {
+                if (ch == '\"') { // end on closing quote
+                    break;
                 }
-                return DATUM_TOKEN;
-
-            default:
-                _datum = "";
+                if (ch == '\\') { // handle escaped quotes
+                    if (_device->getChar(&ch) && ch != '\"') {
+                        _datum.append('\\');
+                    }
+                }
                 _datum.append(ch);
-                while (_device->getChar(&ch)) {
-                    if (QChar(ch).isSpace() || ch == ';' || ch == ':' || ch == '{' || ch == '}' || ch == ',' || ch == '\"') {
-                        ungetChar(ch); // read until we encounter a special character, then replace it
-                        break;
-                    }
-                    _datum.append(ch);
+            }
+            return DATUM_TOKEN;
+
+        default:
+            _datum = "";
+            _datum.append(ch);
+            while (_device->getChar(&ch)) {
+                if (QChar(ch).isSpace() || ch == ';' || ch == ':' || ch == '{' || ch == '}' || ch == ',' || ch == '\"') {
+                    ungetChar(ch); // read until we encounter a special character, then replace it
+                    break;
                 }
-                return DATUM_TOKEN;
+                _datum.append(ch);
+            }
+            return DATUM_TOKEN;
         }
     }
     return NO_TOKEN;
@@ -326,19 +359,22 @@ FBXNode parseTextFBXNode(Tokenizer& tokenizer) {
         if (token == ',') {
             expectingDatum = true;
 
-        } else if (token == Tokenizer::DATUM_TOKEN && expectingDatum) {
+        }
+        else if (token == Tokenizer::DATUM_TOKEN && expectingDatum) {
             QByteArray datum = tokenizer.getDatum();
             if ((token = tokenizer.nextToken()) == ':') {
                 tokenizer.ungetChar(':');
                 tokenizer.pushBackToken(Tokenizer::DATUM_TOKEN);
-                return node;    
-                
-            } else {
+                return node;
+
+            }
+            else {
                 tokenizer.pushBackToken(token);
                 node.properties.append(datum);
                 expectingDatum = false;
             }
-        } else {
+        }
+        else {
             tokenizer.pushBackToken(token);
             return node;
         }
@@ -360,7 +396,9 @@ FBXNode FBXReader::parseFBX(QIODevice* device) {
             if (next.name.isNull()) {
                 return top;
 
-            } else {
+
+            }
+            else {
                 top.children.append(next);
             }
         }
@@ -370,13 +408,13 @@ FBXNode FBXReader::parseFBX(QIODevice* device) {
     in.setByteOrder(QDataStream::LittleEndian);
     in.setVersion(QDataStream::Qt_4_5); // for single/double precision switch
 
-    // see http://code.blender.org/index.php/2013/08/fbx-binary-file-format-specification/ for an explanation
-    // of the FBX binary format
+                                        // see http://code.blender.org/index.php/2013/08/fbx-binary-file-format-specification/ for an explanation
+                                        // of the FBX binary format
 
-    // The first 27 bytes contain the header.
-    //   Bytes 0 - 20: Kaydara FBX Binary  \x00(file - magic, with 2 spaces at the end, then a NULL terminator).
-    //   Bytes 21 - 22: [0x1A, 0x00](unknown but all observed files show these bytes).
-    //   Bytes 23 - 26 : unsigned int, the version number. 7300 for version 7.3 for example.
+                                        // The first 27 bytes contain the header.
+                                        //   Bytes 0 - 20: Kaydara FBX Binary  \x00(file - magic, with 2 spaces at the end, then a NULL terminator).
+                                        //   Bytes 21 - 22: [0x1A, 0x00](unknown but all observed files show these bytes).
+                                        //   Bytes 23 - 26 : unsigned int, the version number. 7300 for version 7.3 for example.
     const int HEADER_BEFORE_VERSION = 23;
     const quint32 VERSION_FBX2016 = 7500;
     in.skipRawData(HEADER_BEFORE_VERSION);
@@ -394,7 +432,8 @@ FBXNode FBXReader::parseFBX(QIODevice* device) {
         if (next.name.isNull()) {
             return top;
 
-        } else {
+        }
+        else {
             top.children.append(next);
         }
     }
@@ -467,7 +506,7 @@ glm::mat4 FBXReader::createMat4(const QVector<double>& doubleVector) {
 }
 
 QVector<int> FBXReader::getIntVector(const FBXNode& node) {
-    foreach (const FBXNode& child, node.children) {
+    foreach(const FBXNode& child, node.children) {
         if (child.name == "a") {
             return getIntVector(child);
         }
@@ -486,7 +525,7 @@ QVector<int> FBXReader::getIntVector(const FBXNode& node) {
 }
 
 QVector<float> FBXReader::getFloatVector(const FBXNode& node) {
-    foreach (const FBXNode& child, node.children) {
+    foreach(const FBXNode& child, node.children) {
         if (child.name == "a") {
             return getFloatVector(child);
         }
@@ -505,7 +544,7 @@ QVector<float> FBXReader::getFloatVector(const FBXNode& node) {
 }
 
 QVector<double> FBXReader::getDoubleVector(const FBXNode& node) {
-    foreach (const FBXNode& child, node.children) {
+    foreach(const FBXNode& child, node.children) {
         if (child.name == "a") {
             return getDoubleVector(child);
         }

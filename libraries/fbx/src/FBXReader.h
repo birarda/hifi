@@ -39,16 +39,19 @@ extern const char* HUMANIK_JOINTS[];
 /// A node within an FBX document.
 class FBXNode {
 public:
-    
+
     QByteArray name;
     QVariantList properties;
     FBXNodeList children;
+    QByteArray dracoArray;
+    bool isDracoNode = false;
+    int x = 0;
 };
 
 /// A single blendshape extracted from an FBX document.
 class FBXBlendshape {
 public:
-    
+
     QVector<int> indices;
     QVector<glm::vec3> vertices;
     QVector<glm::vec3> normals;
@@ -78,7 +81,7 @@ public:
     glm::quat postRotation;  // Rpost
     glm::mat4 postTransform; // Rp-1 * Soff * Sp * S * Sp-1
 
-    // World = ParentWorld * T * (Roff * Rp) * Rpre * R * Rpost * (Rp-1 * Soff * Sp * S * Sp-1)
+                             // World = ParentWorld * T * (Roff * Rp) * Rpre * R * Rpost * (Rp-1 * Soff * Sp * S * Sp-1)
 
     glm::mat4 transform;
     glm::vec3 rotationMin;  // radians
@@ -116,7 +119,7 @@ public:
     QByteArray content;
 
     Transform transform;
-    int maxNumPixels { MAX_NUM_PIXELS_FOR_FBX_TEXTURE };
+    int maxNumPixels{ MAX_NUM_PIXELS_FOR_FBX_TEXTURE };
     int texcoordSet;
     QString texcoordSetName;
 
@@ -140,12 +143,12 @@ class FBXMaterial {
 public:
     FBXMaterial() {};
     FBXMaterial(const glm::vec3& diffuseColor, const glm::vec3& specularColor, const glm::vec3& emissiveColor,
-         float shininess, float opacity) :
+        float shininess, float opacity) :
         diffuseColor(diffuseColor),
         specularColor(specularColor),
         emissiveColor(emissiveColor),
         shininess(shininess),
-        opacity(opacity)  {}
+        opacity(opacity) {}
 
     void getTextureNames(QSet<QString>& textureList) const;
     void setMaxNumPixelsPerTexture(int maxNumPixels);
@@ -204,7 +207,7 @@ class FBXMesh {
 public:
 
     QVector<FBXMeshPart> parts;
-    
+
     QVector<glm::vec3> vertices;
     QVector<glm::vec3> normals;
     QVector<glm::vec3> tangents;
@@ -226,6 +229,12 @@ public:
     model::MeshPointer _mesh;
 };
 
+//class Vertex {
+//public:
+//    int originalIndex;
+//    glm::vec2 texCoord;
+//    glm::vec2 texCoord1;
+//};
 class ExtractedMesh {
 public:
     FBXMesh mesh;
@@ -233,6 +242,7 @@ public:
     QVector<QHash<int, int> > blendshapeIndexMaps;
     QVector<QPair<int, int> > partMaterialTextures;
     QHash<QString, size_t> texcoordSetMap;
+    //QHash<Vertex, int> indices;
 };
 
 /// A single animation frame extracted from an FBX document.
@@ -275,13 +285,13 @@ public:
     QVector<FBXJoint> joints;
     QHash<QString, int> jointIndices; ///< 1-based, so as to more easily detect missing indices
     bool hasSkeletonJoints;
-    
+
     QVector<FBXMesh> meshes;
 
     QHash<QString, FBXMaterial> materials;
 
     glm::mat4 offset; // This includes offset, rotation, and scale as specified by the FST file
-    
+
     int leftEyeJointIndex = -1;
     int rightEyeJointIndex = -1;
     int neckJointIndex = -1;
@@ -297,19 +307,19 @@ public:
     float rightEyeSize = 0.0f;
 
     QVector<int> humanIKJointIndices;
-    
+
     glm::vec3 palmDirection;
-    
+
     glm::vec3 neckPivot;
-    
+
     Extents bindExtents;
     Extents meshExtents;
-    
+
     QVector<FBXAnimationFrame> animationFrames;
-        
+
     int getJointIndex(const QString& name) const { return jointIndices.value(name) - 1; }
     QStringList getJointNames() const;
-    
+
     bool hasBlendedMeshes() const;
 
     /// Returns the unscaled extents of the model's mesh
@@ -318,10 +328,10 @@ public:
     bool convexHullContains(const glm::vec3& point) const;
 
     QHash<int, QString> meshIndicesToModelNames;
-    
+
     /// given a meshIndex this will return the name of the model that mesh belongs to if known
     QString getModelNameOfMesh(int meshIndex) const;
-    
+
     QList<QString> blendshapeChannelNames;
 };
 
@@ -354,7 +364,8 @@ public:
     bool assign(T& ref, const T& v) {
         if (ref == v) {
             return false;
-        } else {
+        }
+        else {
             ref = v;
             isDefault = false;
             return true;
@@ -376,7 +387,7 @@ public:
         useMaterial(true),
         isDefault(true)
     {}
-    
+
     TextureParam(const TextureParam& src) :
         UVTranslation(src.UVTranslation),
         UVScaling(src.UVScaling),
@@ -390,21 +401,30 @@ public:
         useMaterial(src.useMaterial),
         isDefault(src.isDefault)
     {}
-    
+
 };
 
+//namespace draco {
+//    class Mesh;
+//}
+
 class ExtractedMesh;
+
+
 
 class FBXReader {
 public:
     FBXGeometry* _fbxGeometry;
-
+    static QByteArray dracoArray;
     FBXNode _fbxNode;
     static FBXNode parseFBX(QIODevice* device);
 
     FBXGeometry* extractFBXGeometry(const QVariantHash& mapping, const QString& url);
 
     ExtractedMesh extractMesh(const FBXNode& object, unsigned int& meshIndex);
+
+    //ExtractedMesh extractDracoMesh(draco::Mesh* mesh, unsigned int& meshIndex);
+    
     QHash<QString, ExtractedMesh> meshes;
     static void buildModelMesh(FBXMesh& extractedMesh, const QString& url);
 
@@ -456,5 +476,8 @@ public:
     static QVector<float> getFloatVector(const FBXNode& node);
     static QVector<double> getDoubleVector(const FBXNode& node);
 };
+
+
+
 
 #endif // hifi_FBXReader_h

@@ -23,9 +23,15 @@
 #include "ModelFormatLogging.h"
 
 #include "FBXReader.h"
-
 #include <memory>
-
+#include "draco\mesh\mesh.h"
+#include "draco\io\obj_encoder.h"
+#include "draco\core\draco_types.h"
+#include "draco\mesh\triangle_soup_mesh_builder.h"
+#include "draco\compression\encode.h"
+#include <fstream>
+#include "draco\io\obj_decoder.h"
+#include "draco\compression\decode.h"
 
 class Vertex {
 public:
@@ -60,7 +66,7 @@ public:
     QVector<int> normalIndices;
 
     bool colorsByVertex;
-    glm::vec4 averageColor{1.0f, 1.0f, 1.0f, 1.0f};
+    glm::vec4 averageColor{ 1.0f, 1.0f, 1.0f, 1.0f };
     QVector<glm::vec4> colors;
     QVector<int> colorIndices;
 
@@ -72,18 +78,18 @@ public:
     std::vector<AttributeData> attributes;
 };
 
-
 void appendIndex(MeshData& data, QVector<int>& indices, int index) {
     if (index >= data.polygonIndices.size()) {
         return;
     }
+
     int vertexIndex = data.polygonIndices.at(index);
     if (vertexIndex < 0) {
         vertexIndex = -vertexIndex - 1;
     }
     Vertex vertex;
     vertex.originalIndex = vertexIndex;
-    
+
     glm::vec3 position;
     if (vertexIndex < data.vertices.size()) {
         position = data.vertices.at(vertexIndex);
@@ -91,7 +97,7 @@ void appendIndex(MeshData& data, QVector<int>& indices, int index) {
 
     glm::vec3 normal;
     int normalIndex = data.normalsByVertex ? vertexIndex : index;
-    if (data.normalIndices.isEmpty()) {    
+    if (data.normalIndices.isEmpty()) {
         if (normalIndex < data.normals.size()) {
             normal = data.normals.at(normalIndex);
         }
@@ -107,7 +113,7 @@ void appendIndex(MeshData& data, QVector<int>& indices, int index) {
     bool hasColors = (data.colors.size() > 1);
     if (hasColors) {
         int colorIndex = data.colorsByVertex ? vertexIndex : index;
-        if (data.colorIndices.isEmpty()) {    
+        if (data.colorIndices.isEmpty()) {
             if (colorIndex < data.colors.size()) {
                 color = data.colors.at(colorIndex);
             }
@@ -129,7 +135,7 @@ void appendIndex(MeshData& data, QVector<int>& indices, int index) {
             vertex.texCoord = data.texCoords.at(texCoordIndex);
         }
     }
-    
+
     bool hasMoreTexcoords = (data.attributes.size() > 1);
     if (hasMoreTexcoords) {
         if (data.attributes[1].texCoordIndices.empty()) {
@@ -168,31 +174,285 @@ void appendIndex(MeshData& data, QVector<int>& indices, int index) {
 ExtractedMesh FBXReader::extractMesh(const FBXNode& object, unsigned int& meshIndex) {
     MeshData data;
     data.extracted.mesh.meshIndex = meshIndex++;
-    QVector<int> materials;
-    QVector<int> textures;
+    QVector<int> materials = {0};// { 0, 616 };
+    QVector<int> textures = {};
     bool isMaterialPerPolygon = false;
     static const QVariant BY_VERTICE = QByteArray("ByVertice");
     static const QVariant INDEX_TO_DIRECT = QByteArray("IndexToDirect");
-    foreach (const FBXNode& child, object.children) {
-        if (child.name == "Vertices") {
+    int count = 0;
+    bool dracoNode = false;
+    foreach(const FBXNode& child, object.children) {
+
+        if (child.name == "DracoMesh") {
+            dracoNode = true;
+            // Load draco mesh 
+            draco::Decoder decoder;
+            draco::DecoderBuffer decodedBuffer;
+            QByteArray dracoArray = child.properties.at(0).value<QByteArray>();
+            decodedBuffer.Init(dracoArray.data(), dracoArray.size());
+            
+            std::unique_ptr<draco::Mesh> dracoMesh1(new draco::Mesh());
+            decoder.DecodeBufferToGeometry(&decodedBuffer, dracoMesh1.get());
+            draco::Mesh* dracoMesh = dracoMesh1.get();
+            
+            // Process draco mesh into data.extracted
+            ExtractedMesh &extractedMesh = data.extracted;
+            
+            // Positions
+            
+            auto positionAttribute = dracoMesh->GetNamedAttribute(draco::GeometryAttribute::POSITION);
+            QVector<glm::vec3> positionValues;
+            
+            if (positionAttribute) {
+                
+                std::array<float, 3> positionValue;
+                for (draco::AttributeValueIndex i(0); i < positionAttribute->size(); ++i) {
+                    positionAttribute->ConvertValue<float, 3>(i, &positionValue[0]);
+                    float x = positionValue[0];
+                    float y = positionValue[1];
+                    float z = positionValue[2];
+                    positionValues.append(glm::vec3(x, y, z));
+                }
+
+              }
+            
+            // Polygon Vertex Indices
+            
+            QVector<int> verticeIndices;
+            for (draco::FaceIndex i(0); i < dracoMesh->num_faces(); ++i) {
+                for (int j = 0; j < 3; ++j) {
+                    const draco::PointIndex verticeIndex = dracoMesh->face(i)[j];
+                    verticeIndices.push_back(positionAttribute->mapped_index(verticeIndex).value());
+                }
+            }
+            
+            // Normals
+            
+            //data.normalsByVertex = true;
+            //bool indexToDirect = false;
+            QVector<glm::vec3> normalValues;
+            auto normalAttribute = dracoMesh->GetNamedAttribute(draco::GeometryAttribute::NORMAL);
+            if (normalAttribute) {
+                std::array<float, 3> normalValue;
+                for (draco::AttributeValueIndex i(0); i < normalAttribute->size(); ++i) {
+                    normalAttribute->ConvertValue<float, 3>(i, &normalValue[0]);
+                    float x = normalValue[0];
+                    float y = normalValue[1];
+                    float z = normalValue[2];
+                    normalValues.append(glm::vec3(x, y, z));
+                }
+            }
+            
+            //Getting UVs
+            
+            QVector<glm::vec2> uvValues;
+            AttributeData attrib;
+            attrib.index = 0;
+            auto uvAttribute = dracoMesh->GetNamedAttribute(draco::GeometryAttribute::TEX_COORD);
+            if (uvAttribute) {
+                std::array<float, 3> uvValue;
+                for (draco::AttributeValueIndex i(0); i < uvAttribute->size(); ++i) {
+                    uvAttribute->ConvertValue<float, 3>(i, &uvValue[0]);
+                    float x = uvValue[0];
+                    float y = uvValue[1];
+                    uvValues.append(glm::vec2(x, y));
+                    attrib.texCoords.append(glm::vec2(x, y));
+                }
+            }
+            
+            data.extracted.texcoordSetMap.insert(attrib.name, data.attributes.size());
+            data.attributes.push_back(attrib);
+
+            QHash<QString, size_t>::iterator it = data.extracted.texcoordSetMap.find(attrib.name);
+            if (it == data.extracted.texcoordSetMap.end()) {
+                data.extracted.texcoordSetMap.insert(attrib.name, data.attributes.size());
+                data.attributes.push_back(attrib);
+            } else {
+                // WTF same names for different UVs?
+                qCDebug(modelformat) << "LayerElementUV #" << attrib.index << " is reusing the same name as #" << (*it) << ". Skip this texcoord attribute.";
+            }
+
+            
+            //Getting Color
+            
+            //data.colorsByVertex = false;
+            QVector<glm::vec4> colorValues;
+            auto colorAttribute = dracoMesh->GetNamedAttribute(draco::GeometryAttribute::COLOR);
+            if (colorAttribute) {
+                std::array<float, 3> colorValue;
+                for (draco::AttributeValueIndex i(0); i < colorAttribute->size(); ++i) {
+                    colorAttribute->ConvertValue<float, 3>(i, &colorValue[0]);
+                    float x = colorValue[0];
+                    float y = colorValue[1];
+                    float z = colorValue[2];
+                    float k = 0;
+                    colorValues.append(glm::vec4(x, y, z, k));
+                }
+            }
+
+            //if (indexToDirect && data.normalIndices.isEmpty()) {
+            //    // hack to work around wacky Makehuman exports
+            //    data.colorsByVertex = true;
+            //}
+
+            // Per Face Materials
+           
+           /* int32_t DRACO_ATTRIBUTE_MATERIAL_ID = 1000;
+            auto materialAttribute = dracoMesh->attribute(DRACO_ATTRIBUTE_MATERIAL_ID);
+            qCDebug(modelformat) << "MaterialAttribute" << materialAttribute;*/
+
+            bool isMultiMaterial = false;
+            if (isMaterialPerPolygon) {
+                isMultiMaterial = true;
+            }
+            // TODO: make excellent use of isMultiMaterial
+            Q_UNUSED(isMultiMaterial);
+
+              int polygonIndex = 0;
+              QHash<QPair<int, int>, int> materialTextureParts;
+              int partIndex = 0;
+              int nextIndex = 0;
+              QVector<int> normalIndices = {};
+              for (int beginIndex = 0; beginIndex < verticeIndices.size(); ) {
+                  polygonIndex++;
+                  QPair<int, int> materialTexture((polygonIndex < materials.size()) ? materials.at(polygonIndex) : 0,
+                                                  (polygonIndex < textures.size()) ? textures.at(polygonIndex) : 0);
+
+                  int& partIndex = materialTextureParts[materialTexture];
+                  if (partIndex == 0) {
+                      extractedMesh.partMaterialTextures.append(materialTexture);
+                      extractedMesh.mesh.parts.resize(extractedMesh.mesh.parts.size() + 1);
+                      partIndex = extractedMesh.mesh.parts.size();
+                  }
+
+                  FBXMeshPart& part = extractedMesh.mesh.parts[partIndex - 1];
+                  for (nextIndex = beginIndex; nextIndex < beginIndex + 3; nextIndex++) {
+                      
+                      int vertexIndex = verticeIndices.at(nextIndex);
+                      Vertex vertex;
+                      vertex.originalIndex = vertexIndex;
+
+                      //Positions
+
+                      glm::vec3 position;
+                      if (vertexIndex < positionValues.size()) {
+                          position = positionValues.at(vertexIndex);
+                      }
+
+                      //Normals
+
+                      glm::vec3 normal;
+                      //int normalIndex = data.normalsByVertex ? vertexIndex : index;
+                      int normalIndex = vertexIndex;
+                      if (normalIndices.isEmpty()) {
+                          if (normalIndex < normalValues.size()) {
+                              normal = normalValues.at(normalIndex);
+                              /* qCDebug(modelformat) << "Index" << normalIndex;
+                              qCDebug(modelformat) << "NormalValue" << normal;*/
+                          }
+                      } else if (normalIndex < normalIndices.size()) {
+                          normalIndex = normalIndices.at(normalIndex);
+                          if (normalIndex >= 0 && normalIndex < normalValues.size()) {
+                              normal = normalValues.at(normalIndex);
+                          }
+                      }
+
+                      //Colors
+
+                      glm::vec4 color;
+                      bool hasColors = (colorValues.size() > 1);
+                      if (hasColors) {
+                          //int colorIndex = data.colorsByVertex ? vertexIndex : index;
+                          int colorIndex = vertexIndex;
+                          /*if (data.colorIndices.isEmpty()) {
+                              if (colorIndex < data.colors.size()) {*/
+                                  color = colorValues.at(colorIndex);
+                              //}
+                          /*} else if (colorIndex < data.colorIndices.size()) {
+                              colorIndex = data.colorIndices.at(colorIndex);
+                              if (colorIndex >= 0 && colorIndex < data.colors.size()) {
+                                  color = data.colors.at(colorIndex);
+                              }
+                          }*/
+                      }
+
+                      //UVs
+
+                      //if (data.texCoordIndices.isEmpty()) {
+                          //if (nextIndex < uvValues.size()) {
+                              vertex.texCoord = uvValues.at(vertexIndex);
+                          //}
+                      //} 
+                      /*else if (index < data.texCoordIndices.size()) {
+                          int texCoordIndex = data.texCoordIndices.at(index);
+                          if (texCoordIndex >= 0 && texCoordIndex < data.texCoords.size()) {
+                              vertex.texCoord = data.texCoords.at(texCoordIndex);
+                          }
+                      }*/
+
+                      /*bool hasMoreTexcoords = (data.attributes.size() > 1);
+                      if (hasMoreTexcoords) {
+                      if (data.attributes[1].texCoordIndices.empty()) {
+                      if (index < data.attributes[1].texCoords.size()) {
+                      vertex.texCoord1 = data.attributes[1].texCoords.at(index);
+                      }
+                      } else if (index < data.attributes[1].texCoordIndices.size()) {
+                      int texCoordIndex = data.attributes[1].texCoordIndices.at(index);
+                      if (texCoordIndex >= 0 && texCoordIndex < data.attributes[1].texCoords.size()) {
+                      vertex.texCoord1 = data.attributes[1].texCoords.at(texCoordIndex);
+                      }
+                      }
+                      }*/
+
+
+                      QHash<Vertex, int>::const_iterator it = data.indices.find(vertex);
+                      if (it == data.indices.constEnd()) {
+                          int newIndex = extractedMesh.mesh.vertices.size();
+                          part.triangleIndices.append(newIndex);
+                          data.indices.insert(vertex, newIndex);
+                          //extractedMesh.indices.insert(vertex, newIndex);
+                          extractedMesh.newIndices.insert(vertexIndex, newIndex);
+                          extractedMesh.mesh.vertices.append(position);
+                          extractedMesh.mesh.normals.append(normal);
+                          extractedMesh.mesh.texCoords.append(vertex.texCoord);
+                           if (hasColors) {
+                          extractedMesh.mesh.colors.append(glm::vec3(color));
+                          }
+                          /*if (hasMoreTexcoords) {
+                          data.extracted.mesh.texCoords1.append(vertex.texCoord1);
+                          }*/
+                      } else {
+                          part.triangleIndices.append(*it);
+                          extractedMesh.mesh.normals[*it] += normal;
+                      }
+
+                  }
+
+                  beginIndex = nextIndex;
+              }
+
+            
+        
+        } else if (child.name == "Vertices") {
             data.vertices = createVec3Vector(getDoubleVector(child));
 
         } else if (child.name == "PolygonVertexIndex") {
             data.polygonIndices = getIntVector(child);
-
+            
         } else if (child.name == "LayerElementNormal") {
             data.normalsByVertex = false;
             bool indexToDirect = false;
-            foreach (const FBXNode& subdata, child.children) {
+            foreach(const FBXNode& subdata, child.children) {
                 if (subdata.name == "Normals") {
                     data.normals = createVec3Vector(getDoubleVector(subdata));
 
                 } else if (subdata.name == "NormalsIndex") {
                     data.normalIndices = getIntVector(subdata);
+                    
 
                 } else if (subdata.name == "MappingInformationType" && subdata.properties.at(0) == BY_VERTICE) {
                     data.normalsByVertex = true;
-                    
+
                 } else if (subdata.name == "ReferenceInformationType" && subdata.properties.at(0) == INDEX_TO_DIRECT) {
                     indexToDirect = true;
                 }
@@ -204,7 +464,7 @@ ExtractedMesh FBXReader::extractMesh(const FBXNode& object, unsigned int& meshIn
         } else if (child.name == "LayerElementColor") {
             data.colorsByVertex = false;
             bool indexToDirect = false;
-            foreach (const FBXNode& subdata, child.children) {
+            foreach(const FBXNode& subdata, child.children) {
                 if (subdata.name == "Colors") {
                     data.colors = createVec4VectorRGBA(getDoubleVector(subdata), data.averageColor);
                 } else if (subdata.name == "ColorsIndex") {
@@ -212,7 +472,7 @@ ExtractedMesh FBXReader::extractMesh(const FBXNode& object, unsigned int& meshIn
 
                 } else if (subdata.name == "MappingInformationType" && subdata.properties.at(0) == BY_VERTICE) {
                     data.colorsByVertex = true;
-                    
+
                 } else if (subdata.name == "ReferenceInformationType" && subdata.properties.at(0) == INDEX_TO_DIRECT) {
                     indexToDirect = true;
                 }
@@ -234,12 +494,12 @@ ExtractedMesh FBXReader::extractMesh(const FBXNode& object, unsigned int& meshIn
                 qCDebug(modelformat) << "LayerElementColor has an average value of 0.0f... let's forget it.";
             }
 #endif
-         
+
         } else if (child.name == "LayerElementUV") {
             if (child.properties.at(0).toInt() == 0) {
                 AttributeData attrib;
                 attrib.index = child.properties.at(0).toInt();
-                foreach (const FBXNode& subdata, child.children) {
+                foreach(const FBXNode& subdata, child.children) {
                     if (subdata.name == "UV") {
                         data.texCoords = createVec2Vector(getDoubleVector(subdata));
                         attrib.texCoords = createVec2Vector(getDoubleVector(subdata));
@@ -248,14 +508,14 @@ ExtractedMesh FBXReader::extractMesh(const FBXNode& object, unsigned int& meshIn
                         attrib.texCoordIndices = getIntVector(subdata);
                     } else if (subdata.name == "Name") {
                         attrib.name = subdata.properties.at(0).toString();
-                    } 
+                    }
 #if defined(DEBUG_FBXREADER)
                     else {
                         int unknown = 0;
                         QString subname = subdata.name.data();
-                        if ( (subdata.name == "Version")
-                             || (subdata.name == "MappingInformationType")
-                             || (subdata.name == "ReferenceInformationType") ) {
+                        if ((subdata.name == "Version")
+                            || (subdata.name == "MappingInformationType")
+                            || (subdata.name == "ReferenceInformationType")) {
                         } else {
                             unknown++;
                         }
@@ -267,21 +527,21 @@ ExtractedMesh FBXReader::extractMesh(const FBXNode& object, unsigned int& meshIn
             } else {
                 AttributeData attrib;
                 attrib.index = child.properties.at(0).toInt();
-                foreach (const FBXNode& subdata, child.children) {
+                foreach(const FBXNode& subdata, child.children) {
                     if (subdata.name == "UV") {
                         attrib.texCoords = createVec2Vector(getDoubleVector(subdata));
                     } else if (subdata.name == "UVIndex") {
                         attrib.texCoordIndices = getIntVector(subdata);
-                    } else if  (subdata.name == "Name") {
+                    } else if (subdata.name == "Name") {
                         attrib.name = subdata.properties.at(0).toString();
                     }
 #if defined(DEBUG_FBXREADER)
                     else {
                         int unknown = 0;
                         QString subname = subdata.name.data();
-                        if ( (subdata.name == "Version")
-                             || (subdata.name == "MappingInformationType")
-                             || (subdata.name == "ReferenceInformationType") ) {
+                        if ((subdata.name == "Version")
+                            || (subdata.name == "MappingInformationType")
+                            || (subdata.name == "ReferenceInformationType")) {
                         } else {
                             unknown++;
                         }
@@ -300,9 +560,10 @@ ExtractedMesh FBXReader::extractMesh(const FBXNode& object, unsigned int& meshIn
             }
         } else if (child.name == "LayerElementMaterial") {
             static const QVariant BY_POLYGON = QByteArray("ByPolygon");
-            foreach (const FBXNode& subdata, child.children) {
+            foreach(const FBXNode& subdata, child.children) {
                 if (subdata.name == "Materials") {
                     materials = getIntVector(subdata);
+                    qCDebug(modelformat) << "MaterialsBC" << materials;
                 } else if (subdata.name == "MappingInformationType") {
                     if (subdata.properties.at(0) == BY_POLYGON)
                         isMaterialPerPolygon = true;
@@ -313,14 +574,15 @@ ExtractedMesh FBXReader::extractMesh(const FBXNode& object, unsigned int& meshIn
 
 
         } else if (child.name == "LayerElementTexture") {
-            foreach (const FBXNode& subdata, child.children) {
+            foreach(const FBXNode& subdata, child.children) {
                 if (subdata.name == "TextureId") {
                     textures = getIntVector(subdata);
+                    qCDebug(modelformat) << "TexturesBC" << textures;
                 }
             }
         }
     }
-
+    //qCDebug(modelformat) << "NormalIndices" << data.normalIndices;
     bool isMultiMaterial = false;
     if (isMaterialPerPolygon) {
         isMultiMaterial = true;
@@ -330,6 +592,7 @@ ExtractedMesh FBXReader::extractMesh(const FBXNode& object, unsigned int& meshIn
 
     // convert the polygons to quads and triangles
     int polygonIndex = 0;
+    //polygonIndex = 0;
     QHash<QPair<int, int>, int> materialTextureParts;
     for (int beginIndex = 0; beginIndex < data.polygonIndices.size(); polygonIndex++) {
         int endIndex = beginIndex;
@@ -337,6 +600,19 @@ ExtractedMesh FBXReader::extractMesh(const FBXNode& object, unsigned int& meshIn
 
         QPair<int, int> materialTexture((polygonIndex < materials.size()) ? materials.at(polygonIndex) : 0,
             (polygonIndex < textures.size()) ? textures.at(polygonIndex) : 0);
+       /* if (count == 0 && dracoNode) {
+
+            materialTexture.first = -1631458632;
+            materialTexture.second = 521;
+            count++;
+
+        } else if (count == 1 && dracoNode) {
+
+            materialTexture.first = 0;
+            materialTexture.second = 0;
+        }*/
+        /*qCDebug(modelformat) << "MaterialTextureFirst" << materialTexture.first;
+        qCDebug(modelformat) << "MaterialTextureSecond" << materialTexture.second;*/
         int& partIndex = materialTextureParts[materialTexture];
         if (partIndex == 0) {
             data.extracted.partMaterialTextures.append(materialTexture);
@@ -344,7 +620,6 @@ ExtractedMesh FBXReader::extractMesh(const FBXNode& object, unsigned int& meshIn
             partIndex = data.extracted.mesh.parts.size();
         }
         FBXMeshPart& part = data.extracted.mesh.parts[partIndex - 1];
-        
         if (endIndex - beginIndex == 4) {
             appendIndex(data, part.quadIndices, beginIndex++);
             appendIndex(data, part.quadIndices, beginIndex++);
@@ -388,6 +663,319 @@ ExtractedMesh FBXReader::extractMesh(const FBXNode& object, unsigned int& meshIn
     return data.extracted;
 }
 
+//ExtractedMesh  extractDracoMesh(draco::Mesh* dracoMesh, unsigned int& meshIndex) {
+//
+//    //MeshData data;
+//    ExtractedMesh extractedMesh;
+//    //data.extracted.mesh.meshIndex = meshIndex++;
+//    extractedMesh.mesh.meshIndex = meshIndex++;
+//
+//    QVector<int> materials = { 0 };
+//    QVector<int> textures;
+//    bool isMaterialPerPolygon = false;
+//    static const QVariant BY_VERTICE = QByteArray("ByVertice");
+//    static const QVariant INDEX_TO_DIRECT = QByteArray("IndexToDirect");
+//
+//    // Positions
+//
+//    auto positionAttribute = dracoMesh->GetNamedAttribute(draco::GeometryAttribute::POSITION);
+//    QVector<glm::vec3> positionValues;
+//    if (positionAttribute) {
+//
+//        std::array<float, 3> positionValue;
+//        
+//        for (draco::AttributeValueIndex i(0); i < positionAttribute->size(); ++i) {
+//            positionAttribute->ConvertValue<float, 3>(i, &positionValue[0]);
+//            float x = positionValue[0];
+//            float y = positionValue[1];
+//            float z = positionValue[2];
+//            positionValues.append(glm::vec3(x, y, z));
+//        }
+//
+//        //data.vertices = positionValues;
+//        
+//    }
+//
+//    // Polygon Vertex Indices
+//
+//    QVector<int> verticeIndices;
+//
+//    for (draco::FaceIndex i(0); i < dracoMesh->num_faces(); ++i) {
+//
+//        for (int j = 0; j < 3; ++j) {
+//            const draco::PointIndex verticeIndex = dracoMesh->face(i)[j];
+//            verticeIndices.push_back(positionAttribute->mapped_index(verticeIndex).value());
+//        }
+//
+//    }
+//
+//   /* int k = 0;
+//    for (int i = 0;i < verticeIndices.size();i++) {
+//        if (k == 2) {
+//
+//            int m = verticeIndices[i];
+//            verticeIndices[i] = -m - 1;
+//            k = 0;
+//        }
+//        k++;
+//    }*/
+//    //QVector<int> verticeIndices = { 1, 3, -1, 7, 5, -5, 4, 1, -1, 5, 2, -2, 2, 7, -4, 0, 7, -5, 1, 2, -4, 7, 6, -6, 4, 5, -2, 5, 6, -3, 2, 6, -8, 0, 3, -8 };
+//
+//    //data.polygonIndices = verticeIndices;
+//    //qCDebug(modelformat) << "Faces" << data.polygonIndices;
+//
+//
+//
+//
+//
+//    // Normals
+//
+//    //data.normalsByVertex = true;
+//    //bool indexToDirect = false;
+//    
+//    QVector<glm::vec3> normalValues;
+//    auto normalAttribute = dracoMesh->GetNamedAttribute(draco::GeometryAttribute::NORMAL);
+//    if (normalAttribute) {
+//
+//        std::array<float, 3> normalValue;
+//
+//        for (draco::AttributeValueIndex i(0); i < normalAttribute->size(); ++i) {
+//            normalAttribute->ConvertValue<float, 3>(i, &normalValue[0]);
+//            float x = normalValue[0];
+//            float y = normalValue[1];
+//            float z = normalValue[2];
+//            normalValues.append(glm::vec3(x, y, z));
+//        }
+//
+//        //data.normals = normalValues;
+//       
+//    }
+//    /* QVector<glm::vec3> x = { (glm::vec3)(2.98023e-08, -1, 0), (glm::vec3)(2.98023e-08, -1, 0), (glm::vec3)(2.98023e-08, -1, 0), (glm::vec3)(0, 1, 0),(glm::vec3) (0, 1, 0), (glm::vec3)(0, 1, 0),(glm::vec3) (1, -2.38419e-07, 0), (glm::vec3)(1, -2.38419e-07, 0),(glm::vec3) (1, -2.38419e-07, 0), (glm::vec3)(-8.9407e-08, -4.76837e-07, 1),(glm::vec3) (-8.9407e-08, -4.76837e-07, 1),(glm::vec3) (-8.9407e-08, -4.76837e-07, 1), (glm::vec3)(-1, -1.49012e-07, -2.38419e-07), (glm::vec3)(-1, -1.49012e-07, -2.38419e-07), (glm::vec3)(-1, -1.49012e-07, -2.38419e-07),(glm::vec3) (2.68221e-07, 2.38419e-07, -1), (glm::vec3)(2.68221e-07, 2.38419e-07, -1),(glm::vec3) (2.68221e-07, 2.38419e-07, -1),(glm::vec3) (0, -1, 0), (glm::vec3)(0, -1, 0), (glm::vec3)(0, -1, 0), (glm::vec3)(5.96047e-08, 1, 0), (glm::vec3)(5.96047e-08, 1, 0), (glm::vec3)(5.96047e-08, 1, 0), (glm::vec3)(1, 3.27825e-07, 5.96046e-07), (glm::vec3)(1, 3.27825e-07, 5.96046e-07), (glm::vec3)(1, 3.27825e-07, 5.96046e-07), (glm::vec3)(-4.76837e-07, 1.19209e-07, 1), (glm::vec3)(-4.76837e-07, 1.19209e-07, 1), (glm::vec3)(-4.76837e-07, 1.19209e-07, 1), (glm::vec3)(-1, -1.19209e-07, -2.38419e-07),(glm::vec3) (-1, -1.19209e-07, -2.38419e-07), (glm::vec3)(-1, -1.19209e-07, -2.38419e-07), (glm::vec3)(2.08616e-07, 8.9407e-08, -1), (glm::vec3)(2.08616e-07, 8.9407e-08, -1), (glm::vec3)(2.08616e-07, 8.9407e-08, -1)
+//    };*/
+//     
+//     //normalValues = x;
+//
+//    //if (indexToDirect && data.normalIndices.isEmpty()) {
+//    //    // hack to work around wacky Makehuman exports
+//    //    data.normalsByVertex = true;
+//    //}
+//
+//    //Getting UVs
+//    QVector<glm::vec2> uvValues;
+//    AttributeData attrib;
+//    attrib.index = 0;
+//    auto uvAttribute = dracoMesh->GetNamedAttribute(draco::GeometryAttribute::TEX_COORD);
+//    if (uvAttribute) {
+//
+//        std::array<float, 3> uvValue;
+//        
+//        for (draco::AttributeValueIndex i(0); i < uvAttribute->size(); ++i) {
+//            uvAttribute->ConvertValue<float, 3>(i, &uvValue[0]);
+//            float x = uvValue[0];
+//            float y = uvValue[1];
+//            uvValues.append(glm::vec2(x, y));
+//            attrib.texCoords.append(glm::vec2(x, y));
+//        }
+//
+//        //data.texCoords = uvValues;
+//
+//    }
+//   /* extractedMesh.texcoordSetMap.insert(attrib.name, data.attributes.size());
+//    data.attributes.push_back(attrib);*/
+//    //Getting Color
+//    //data.colorsByVertex = false;
+//    QVector<glm::vec4> colorValues;
+//    auto colorAttribute = dracoMesh->GetNamedAttribute(draco::GeometryAttribute::COLOR);
+//    if (colorAttribute) {
+//
+//        std::array<float, 3> colorValue;
+//        
+//        for (draco::AttributeValueIndex i(0); i < colorAttribute->size(); ++i) {
+//            colorAttribute->ConvertValue<float, 3>(i, &colorValue[0]);
+//            float x = colorValue[0];
+//            float y = colorValue[1];
+//            float z = colorValue[2];
+//            float k = 0;
+//            colorValues.append(glm::vec4(x, y, z, k));
+//        }
+//
+//        //data.colors = colorValues;
+//
+//    }
+//
+//    //if (indexToDirect && data.normalIndices.isEmpty()) {
+//    //    // hack to work around wacky Makehuman exports
+//    //    data.colorsByVertex = true;
+//    //}
+//
+//    //bool isMultiMaterial = false;
+//    //if (isMaterialPerPolygon) {
+//    //    isMultiMaterial = true;
+//    //}
+//    //// TODO: make excellent use of isMultiMaterial
+//    //Q_UNUSED(isMultiMaterial);
+//
+//    int polygonIndex = 0;
+//    QHash<QPair<int, int>, int> materialTextureParts;
+//    int partIndex = 0;
+//    int nextIndex = 0;
+//    QVector<int> normalIndices = {};
+//    for (int beginIndex = 0; beginIndex < verticeIndices.size(); ){//beginIndex++) {
+//        
+//       /* int endIndex = beginIndex;
+//        while (endIndex < verticeIndices.size() && verticeIndices.at(endIndex++) >= 0);
+//        endIndex++;*/
+//        
+//        polygonIndex++;
+//
+//        QPair<int, int> materialTexture((polygonIndex < materials.size()) ? materials.at(polygonIndex) : 0,
+//            (polygonIndex < textures.size()) ? textures.at(polygonIndex) : 0);
+//        
+//        int& partIndex = materialTextureParts[materialTexture];
+//        
+//        if (partIndex == 0) {
+//            extractedMesh.partMaterialTextures.append(materialTexture);
+//            extractedMesh.mesh.parts.resize(extractedMesh.mesh.parts.size() + 1);
+//            partIndex = extractedMesh.mesh.parts.size();
+//        }
+//
+//        FBXMeshPart& part = extractedMesh.mesh.parts[partIndex - 1];
+//
+//            //for (int nextIndex = beginIndex + 1;; ) {
+//            //    appendDracoIndex(&extractedMesh,part.triangleIndices, beginIndex,verticeIndices,positionValues, &normalValues);
+//            //    appendDracoIndex(&extractedMesh,part.triangleIndices, nextIndex++, verticeIndices, positionValues, &normalValues);
+//            //    appendDracoIndex(&extractedMesh,part.triangleIndices, nextIndex, verticeIndices, positionValues, &normalValues);             
+//            //    /*if (nextIndex >= verticeIndices.size() || (nextIndex + 1) %3 == 0) {
+//            //        break;
+//            //    }*/
+//            //    if (nextIndex >= verticeIndices.size() || verticeIndices.at(nextIndex) < 0) {
+//            //        break;
+//            //    }
+//            //}
+//            //beginIndex = endIndex;
+//            //    
+//            //}
+//
+//        for (nextIndex = beginIndex; nextIndex < beginIndex + 3; nextIndex++) {
+//            
+//            int vertexIndex = verticeIndices.at(nextIndex);
+//            Vertex vertex;
+//            vertex.originalIndex = vertexIndex;
+//
+//            //Positions
+//
+//            glm::vec3 position;
+//            if (vertexIndex < positionValues.size()) {
+//                position = positionValues.at(vertexIndex);
+//            }
+//
+//            //Normals
+//
+//            glm::vec3 normal;
+//            //int normalIndex = data.normalsByVertex ? vertexIndex : index;
+//            int normalIndex = nextIndex;
+//            if (normalIndices.isEmpty()) {
+//                if (normalIndex < normalValues.size()) {
+//                    normal = normalValues.at(normalIndex);
+//                   /* qCDebug(modelformat) << "Index" << normalIndex;
+//                    qCDebug(modelformat) << "NormalValue" << normal;*/
+//                }
+//            } else if (normalIndex < normalIndices.size()) {
+//                normalIndex = normalIndices.at(normalIndex);
+//                if (normalIndex >= 0 && normalIndex < normalValues.size()) {
+//                    normal = normalValues.at(normalIndex);
+//                }
+//            }
+//
+//            //Colors
+//
+//            glm::vec4 color;
+//            bool hasColors = (colorValues.size() > 1);
+//            if (hasColors) {
+//                //int colorIndex = data.colorsByVertex ? vertexIndex : index;
+//                int colorIndex = vertexIndex;
+//                /*if (data.colorIndices.isEmpty()) {
+//                    if (colorIndex < data.colors.size()) {*/
+//                        color = colorValues.at(colorIndex);
+//                    //}
+//                /*} else if (colorIndex < data.colorIndices.size()) {
+//                    colorIndex = data.colorIndices.at(colorIndex);
+//                    if (colorIndex >= 0 && colorIndex < data.colors.size()) {
+//                        color = data.colors.at(colorIndex);
+//                    }
+//                }*/
+//            }
+//
+//            //UVs
+//            vertex.texCoord = uvValues.at(vertexIndex);
+//
+//            //if (uvValues.isEmpty()) {
+//            //    if (nextIndex < uvValues.size()) {
+//            //        vertex.texCoord = uvValues.at(nextIndex);
+//            //    }
+//            //}
+//            /* else if (index < data.texCoordIndices.size()) {
+//                int texCoordIndex = data.texCoordIndices.at(index);
+//                if (texCoordIndex >= 0 && texCoordIndex < data.texCoords.size()) {
+//                    vertex.texCoord = data.texCoords.at(texCoordIndex);
+//                }
+//            }*/
+//
+//            /*bool hasMoreTexcoords = (data.attributes.size() > 1);
+//            if (hasMoreTexcoords) {
+//                if (data.attributes[1].texCoordIndices.empty()) {
+//                    if (index < data.attributes[1].texCoords.size()) {
+//                        vertex.texCoord1 = data.attributes[1].texCoords.at(index);
+//                    }
+//                } else if (index < data.attributes[1].texCoordIndices.size()) {
+//                    int texCoordIndex = data.attributes[1].texCoordIndices.at(index);
+//                    if (texCoordIndex >= 0 && texCoordIndex < data.attributes[1].texCoords.size()) {
+//                        vertex.texCoord1 = data.attributes[1].texCoords.at(texCoordIndex);
+//                    }
+//                }
+//            }*/
+//
+//
+//            QHash<Vertex, int>::const_iterator it = extractedMesh.indices.find(vertex);
+//            if (it == extractedMesh.indices.constEnd()) {
+//                int newIndex = extractedMesh.mesh.vertices.size();
+//                part.triangleIndices.append(newIndex);
+//                //data.indices.insert(vertex, newIndex);
+//                extractedMesh.indices.insert(vertex, newIndex);
+//                extractedMesh.newIndices.insert(vertexIndex, newIndex);
+//                extractedMesh.mesh.vertices.append(position);
+//                extractedMesh.mesh.normals.append(normal);
+//                extractedMesh.mesh.texCoords.append(vertex.texCoord);
+//                if (hasColors) {
+//                extractedMesh.mesh.colors.append(glm::vec3(color));
+//                }
+//                /*if (hasMoreTexcoords) {
+//                data.extracted.mesh.texCoords1.append(vertex.texCoord1);
+//                }*/
+//            } else {
+//                part.triangleIndices.append(*it);
+//                extractedMesh.mesh.normals[*it] += normal;
+//            }
+//        
+//        }
+//
+//        beginIndex = nextIndex;
+//    }
+//
+//
+//            
+//
+//
+//                /*if (nextIndex >= verticeIndices.size() || (nextIndex + 1) % 3 == 0) {
+//                    break;
+//                }*/
+//    //qCDebug(modelformat) << "Normals" << extractedMesh.mesh.normals;
+//    /*QVector<glm::vec3> x ={ (glm::vec3)(2.98023e-08, -2, 0), (glm::vec3)(2.98023e-08, -2, 0), (glm::vec3)(2.98023e-08, -1, 0), (glm::vec3)(5.96047e-08, 2, 0), (glm::vec3)(5.96047e-08, 2, 0), (glm::vec3)(2.68221e-07, 1, -1), (glm::vec3)(2, 8.94068e-08, 5.96046e-07), (glm::vec3)(2, 8.94068e-08, 5.96046e-07), (glm::vec3)(1, -2.38419e-07, 0), (glm::vec3)(-5.66244e-07, -3.57628e-07, 2), (glm::vec3)(-5.66244e-07, -3.57628e-07, 2),(glm::vec3) (-8.9407e-08, -4.76837e-07, 1), glm::vec3(-2, -2.68221e-07, -4.76837e-07), (glm::vec3)(-2, -2.68221e-07, -4.76837e-07), (glm::vec3)(-1, -1.49012e-07, -2.38419e-07), (glm::vec3)(4.76837e-07, 3.27826e-07, -2), (glm::vec3)(4.76837e-07, 3.27826e-07, -2), (glm::vec3)(0, -1, 0), (glm::vec3)(5.96047e-08, 1, 0), (glm::vec3)(1, 3.27825e-07, 5.96046e-07),(glm::vec3) (-4.76837e-07, 1.19209e-07, 1), (glm::vec3)(-1, -1.19209e-07, -2.38419e-07),(glm::vec3)  (2.08616e-07, 8.9407e-08, -1) };
+//    extractedMesh.mesh.normals = x;*/
+//    return extractedMesh;
+//}
+
+
 void FBXReader::buildModelMesh(FBXMesh& extractedMesh, const QString& url) {
     static QString repeatedMessage = LogHandler::getInstance().addRepeatedMessageRegex("buildModelMesh failed -- .*");
 
@@ -412,7 +1000,7 @@ void FBXReader::buildModelMesh(FBXMesh& extractedMesh, const QString& url) {
     // Grab the vertices in a buffer
     auto vb = std::make_shared<gpu::Buffer>();
     vb->setData(extractedMesh.vertices.size() * sizeof(glm::vec3),
-                (const gpu::Byte*) extractedMesh.vertices.data());
+        (const gpu::Byte*) extractedMesh.vertices.data());
     gpu::BufferView vbv(vb, gpu::Element(gpu::VEC3, gpu::FLOAT, gpu::XYZ));
     mesh->setVertexBuffer(vbv);
 
@@ -465,49 +1053,49 @@ void FBXReader::buildModelMesh(FBXMesh& extractedMesh, const QString& url) {
 
     if (normalsSize) {
         mesh->addAttribute(gpu::Stream::NORMAL,
-                            model::BufferView(attribBuffer, normalsOffset, normalsSize,
-                            gpu::Element(gpu::VEC3, gpu::FLOAT, gpu::XYZ)));
+                           model::BufferView(attribBuffer, normalsOffset, normalsSize,
+                           gpu::Element(gpu::VEC3, gpu::FLOAT, gpu::XYZ)));
     }
     if (tangentsSize) {
         mesh->addAttribute(gpu::Stream::TANGENT,
-                            model::BufferView(attribBuffer, tangentsOffset, tangentsSize,
-                            gpu::Element(gpu::VEC3, gpu::FLOAT, gpu::XYZ)));
+                           model::BufferView(attribBuffer, tangentsOffset, tangentsSize,
+                           gpu::Element(gpu::VEC3, gpu::FLOAT, gpu::XYZ)));
     }
     if (colorsSize) {
         mesh->addAttribute(gpu::Stream::COLOR,
-                            model::BufferView(attribBuffer, colorsOffset, colorsSize,
-                            gpu::Element(gpu::VEC3, gpu::FLOAT, gpu::RGB)));
+                           model::BufferView(attribBuffer, colorsOffset, colorsSize,
+                           gpu::Element(gpu::VEC3, gpu::FLOAT, gpu::RGB)));
     }
     if (texCoordsSize) {
         mesh->addAttribute(gpu::Stream::TEXCOORD,
-                            model::BufferView( attribBuffer, texCoordsOffset, texCoordsSize,
-                            gpu::Element(gpu::VEC2, gpu::FLOAT, gpu::UV)));
+                           model::BufferView(attribBuffer, texCoordsOffset, texCoordsSize,
+                           gpu::Element(gpu::VEC2, gpu::FLOAT, gpu::UV)));
     }
     if (texCoords1Size) {
-        mesh->addAttribute( gpu::Stream::TEXCOORD1,
-                            model::BufferView(attribBuffer, texCoords1Offset, texCoords1Size,
-                            gpu::Element(gpu::VEC2, gpu::FLOAT, gpu::UV)));
+        mesh->addAttribute(gpu::Stream::TEXCOORD1,
+                           model::BufferView(attribBuffer, texCoords1Offset, texCoords1Size,
+                           gpu::Element(gpu::VEC2, gpu::FLOAT, gpu::UV)));
     } else if (texCoordsSize) {
         mesh->addAttribute(gpu::Stream::TEXCOORD1,
-                            model::BufferView(attribBuffer, texCoordsOffset, texCoordsSize,
-                            gpu::Element(gpu::VEC2, gpu::FLOAT, gpu::UV)));
+                           model::BufferView(attribBuffer, texCoordsOffset, texCoordsSize,
+                           gpu::Element(gpu::VEC2, gpu::FLOAT, gpu::UV)));
     }
 
     if (clusterIndicesSize) {
         if (fbxMesh.clusters.size() < UINT8_MAX) {
             mesh->addAttribute(gpu::Stream::SKIN_CLUSTER_INDEX,
                                model::BufferView(attribBuffer, clusterIndicesOffset, clusterIndicesSize,
-                                                 gpu::Element(gpu::VEC4, gpu::UINT8, gpu::XYZW)));
+                               gpu::Element(gpu::VEC4, gpu::UINT8, gpu::XYZW)));
         } else {
             mesh->addAttribute(gpu::Stream::SKIN_CLUSTER_INDEX,
                                model::BufferView(attribBuffer, clusterIndicesOffset, clusterIndicesSize,
-                                                 gpu::Element(gpu::VEC4, gpu::UINT16, gpu::XYZW)));
+                               gpu::Element(gpu::VEC4, gpu::UINT16, gpu::XYZW)));
         }
     }
     if (clusterWeightsSize) {
         mesh->addAttribute(gpu::Stream::SKIN_CLUSTER_WEIGHT,
-                          model::BufferView(attribBuffer, clusterWeightsOffset, clusterWeightsSize,
-                                            gpu::Element(gpu::VEC4, gpu::NUINT8, gpu::XYZW)));
+                           model::BufferView(attribBuffer, clusterWeightsOffset, clusterWeightsSize,
+                           gpu::Element(gpu::VEC4, gpu::NUINT8, gpu::XYZW)));
     }
 
 
@@ -516,7 +1104,7 @@ void FBXReader::buildModelMesh(FBXMesh& extractedMesh, const QString& url) {
         totalIndices += (part.quadTrianglesIndices.size() + part.triangleIndices.size());
     }
 
-    if (! totalIndices) {
+    if (!totalIndices) {
         qCDebug(modelformat) << "buildModelMesh failed -- no indices, url = " << url;
         return;
     }
@@ -533,11 +1121,11 @@ void FBXReader::buildModelMesh(FBXMesh& extractedMesh, const QString& url) {
     }
     foreach(const FBXMeshPart& part, extractedMesh.parts) {
         model::Mesh::Part modelPart(indexNum, 0, 0, model::Mesh::TRIANGLES);
-        
+
         if (part.quadTrianglesIndices.size()) {
             indexBuffer->setSubData(offset,
-                            part.quadTrianglesIndices.size() * sizeof(int),
-                            (gpu::Byte*) part.quadTrianglesIndices.constData());
+                                    part.quadTrianglesIndices.size() * sizeof(int),
+                                    (gpu::Byte*) part.quadTrianglesIndices.constData());
             offset += part.quadTrianglesIndices.size() * sizeof(int);
             indexNum += part.quadTrianglesIndices.size();
             modelPart._numIndices += part.quadTrianglesIndices.size();
@@ -545,8 +1133,8 @@ void FBXReader::buildModelMesh(FBXMesh& extractedMesh, const QString& url) {
 
         if (part.triangleIndices.size()) {
             indexBuffer->setSubData(offset,
-                            part.triangleIndices.size() * sizeof(int),
-                            (gpu::Byte*) part.triangleIndices.constData());
+                                    part.triangleIndices.size() * sizeof(int),
+                                    (gpu::Byte*) part.triangleIndices.constData());
             offset += part.triangleIndices.size() * sizeof(int);
             indexNum += part.triangleIndices.size();
             modelPart._numIndices += part.triangleIndices.size();

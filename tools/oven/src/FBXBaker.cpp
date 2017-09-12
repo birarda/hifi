@@ -29,20 +29,34 @@
 #include "TextureBaker.h"
 
 #include "FBXBaker.h"
+#include "draco\mesh\mesh.h"
+#include "draco\io\obj_encoder.h"
+#include "draco\core\draco_types.h"
+#include "draco\mesh\triangle_soup_mesh_builder.h"
+#include "draco\compression\encode.h"
+#include <fstream>
+#include "draco\io\obj_decoder.h"
+#include "draco\compression\decode.h"
+#include "fbxsdk\core\base\fbxarray.h"
 
+
+#  ifndef foreach
+#    define foreach Q_FOREACH
+#  endif
+
+using namespace::draco;
 std::once_flag onceFlag;
-FBXSDKManagerUniquePointer FBXBaker::_sdkManager { nullptr };
+FBXSDKManagerUniquePointer FBXBaker::_sdkManager{ nullptr };
 
-FBXBaker::FBXBaker(const QUrl& fbxURL, const QString& baseOutputPath, 
+FBXBaker::FBXBaker(const QUrl& fbxURL, const QString& baseOutputPath,
                    TextureBakerThreadGetter textureThreadGetter, bool copyOriginals) :
     _fbxURL(fbxURL),
     _baseOutputPath(baseOutputPath),
     _textureThreadGetter(textureThreadGetter),
-    _copyOriginals(copyOriginals)
-{
-    std::call_once(onceFlag, [](){
+    _copyOriginals(copyOriginals) {
+    std::call_once(onceFlag, []() {
         // create the static FBX SDK manager
-        _sdkManager = FBXSDKManagerUniquePointer(FbxManager::Create(), [](FbxManager* manager){
+        _sdkManager = FBXSDKManagerUniquePointer(FbxManager::Create(), [](FbxManager* manager) {
             manager->Destroy();
         });
     });
@@ -83,6 +97,13 @@ void FBXBaker::bakeSourceCopy() {
         return;
     }
 
+    // Perforrm mesh compression using Draco
+    compressMesh();
+    //Test();
+    if (hasErrors()) {
+        return;
+    }
+
     // enumerate the textures found in the scene and start a bake for them
     rewriteAndBakeSceneTextures();
 
@@ -90,12 +111,6 @@ void FBXBaker::bakeSourceCopy() {
         return;
     }
 
-    compressMesh();
-    
-    if (hasErrors()) {
-        return;
-    }
-    
     // export the FBX with re-written texture references
     exportScene();
 
@@ -109,7 +124,7 @@ void FBXBaker::bakeSourceCopy() {
 
 void FBXBaker::setupOutputFolder() {
     // construct the output path using the name of the fbx and the base output path
-    _uniqueOutputPath =  _baseOutputPath + "/" + _fbxName + "/";
+    _uniqueOutputPath = _baseOutputPath + "/" + _fbxName + "/";
 
     // make sure there isn't already an output directory using the same name
     int iteration = 0;
@@ -138,7 +153,7 @@ void FBXBaker::loadSourceFBX() {
     // check if the FBX is local or first needs to be downloaded
     if (_fbxURL.isLocalFile()) {
         // load up the local file
-        QFile localFBX { _fbxURL.toLocalFile() };
+        QFile localFBX{ _fbxURL.toLocalFile() };
 
         // make a copy in the output folder
         localFBX.copy(pathToCopyOfOriginal());
@@ -238,7 +253,7 @@ QString FBXBaker::createBakedTextureFileName(const QFileInfo& textureFileInfo) {
     // in case another texture referenced by this model has the same base name
     auto nameMatches = _textureNameMatchCount[textureFileInfo.baseName()];
 
-    QString bakedTextureFileName { textureFileInfo.completeBaseName() };
+    QString bakedTextureFileName{ textureFileInfo.completeBaseName() };
 
     if (nameMatches > 0) {
         // there are already nameMatches texture with this name
@@ -285,7 +300,7 @@ QUrl FBXBaker::getTextureURL(const QFileInfo& textureFileInfo, FbxFileTexture* f
 
 image::TextureUsage::Type textureTypeForMaterialProperty(FbxProperty& property, FbxSurfaceMaterial* material) {
     using namespace image::TextureUsage;
-    
+
     // this is a property we know has a texture, we need to match it to a High Fidelity known texture type
     // since that information is passed to the baking process
 
@@ -296,7 +311,7 @@ image::TextureUsage::Type textureTypeForMaterialProperty(FbxProperty& property, 
     if ((propertyName.contains("diffuse") && !propertyName.contains("tex_global_diffuse"))
         || propertyName.contains("tex_color_map")) {
         return ALBEDO_TEXTURE;
-    } else if (propertyName.contains("transparentcolor") ||  propertyName.contains("transparencyfactor")) {
+    } else if (propertyName.contains("transparentcolor") || propertyName.contains("transparencyfactor")) {
         return ALBEDO_TEXTURE;
     } else if (propertyName.contains("bump")) {
         return BUMP_TEXTURE;
@@ -337,25 +352,255 @@ image::TextureUsage::Type textureTypeForMaterialProperty(FbxProperty& property, 
 
 void FBXBaker::compressMesh() {
 
-    int numGeometry = _scene->GetGeometryCount();
-    FbxMesh* mesh;
-    int x = 0;
-    for (int i = 0; i < numGeometry; i++) {
-        FbxGeometry* geometry = _scene->GetGeometry(i);
+    FbxManager* manager = FbxManager::Create();
+    FbxGeometryConverter converter(manager);
 
-        if (geometry && FbxCast<FbxMesh>(geometry)) {
-        
-            mesh = FbxCast<FbxMesh>(geometry);
-            qCDebug(model_baking) << "Total Polygons for Mesh " << i <<" = " << mesh->GetPolygonCount();
+    FbxVector4 out_data;
+    FbxVector4 out_data1, out_data2;
+
+    std::vector<std::unique_ptr<Mesh>> dracoMeshes;
+
+    std::vector<std::vector<float>> positions;
+    std::unique_ptr<Mesh> dracoMesh;
+    FbxMesh* mesh;
+
+    std::vector<std::vector<float>> normals;
+    std::vector<std::vector<float>> uvs;
+    std::vector<unsigned long> indices;
+    std::vector<std::vector<float>> colors;
+    //std::string buffers="";
+    std::vector<char>buffers;
+
+    if (converter.Triangulate(_scene, true, false)) {
+
+        int numGeometry = _scene->GetGeometryCount();
+        for (int i = 0; i < numGeometry; i++) {
+
+            FbxGeometry* geometry = _scene->GetGeometry(i);
+
+            if (geometry && FbxCast<FbxMesh>(geometry)) {
+
+                mesh = FbxCast<FbxMesh>(geometry);
+
+                TriangleSoupMeshBuilder meshBuilder;
+                auto numPolygons = mesh->GetPolygonCount();
+                meshBuilder.Start(numPolygons);
+
+                // Extract Position 
+
+                auto numControlPoints = mesh->GetControlPointsCount();
+
+                std::vector<std::vector<float>> controlPoints;
+
+                auto numIndices = mesh->GetPolygonVertexCount();
+
+                indices.reserve(numIndices);
+                auto vertices = mesh->GetPolygonVertices();
+
+                for (int i = 0; i < numIndices; ++i) {
+                    indices.push_back(vertices[i]);
+                }
+
+                const int positionAttributeId = meshBuilder.AddAttribute(GeometryAttribute::POSITION, 3, DT_FLOAT32);
+                int k = -1;
+                for (int j = 0; j < numPolygons; j++) {
+
+                    auto pos = mesh->GetControlPointAt(indices[++k]);
+                    std::vector<float> v1{ (float)pos[0], (float)pos[1], (float)pos[2] };
+
+                    auto pos1 = mesh->GetControlPointAt(indices[++k]);
+                    std::vector<float> v2{ (float)pos1[0], (float)pos1[1], (float)pos1[2] };
+
+                    auto pos2 = mesh->GetControlPointAt(indices[++k]);
+                    std::vector<float> v3{ (float)pos2[0], (float)pos2[1], (float)pos2[2] };
+
+                    meshBuilder.SetAttributeValuesForFace(positionAttributeId, FaceIndex(j),
+                                                          v1.data(),
+                                                          v2.data(),
+                                                          v3.data());
+
+                }
+
+                // Extract Normals
+
+                auto normalLayer = mesh->GetElementNormal(0);
+                auto mode = normalLayer->GetMappingMode();
+                assert(mode == FbxGeometryElement::eByControlPoint || mode == FbxGeometryElement::eByPolygonVertex);
+                assert(normalLayer->GetReferenceMode() == FbxGeometryElement::eDirect);
+                normals.assign(numIndices, { 0,0,0 });
+                int f = 0;
+                int normalAttributeId = 0;
+                normalAttributeId = meshBuilder.AddAttribute(GeometryAttribute::NORMAL, 3, DT_FLOAT32);
+
+                for (int i = 0; i < numIndices; ++i) {
+                    FbxDouble* n;
+                    int index = 0;
+                    if (mode == FbxLayerElement::eByControlPoint) {
+                        index = indices[i];
+                    } else {
+                        index = i;
+                    }
+
+                    n = normalLayer->GetDirectArray().GetAt(index).mData;
+                    std::vector<float> v{ (float)n[0], (float)n[1], (float)n[2] };
+                    normals[indices[i]] = v;
+
+                    if ((i + 1) % 3 == 0) {
+
+                        meshBuilder.SetAttributeValuesForFace(normalAttributeId, FaceIndex(f),
+                                                              normals[indices[i - 2]].data(),
+                                                              normals[indices[i - 1]].data(),
+                                                              normals[indices[i]].data());
+
+                        f++;
+                    }
+                }
+
+                // UV
+
+                uvs.assign(numIndices, { 0, 0 });
+                auto uvLayer = mesh->GetLayer(0)->GetUVs();
+                int uvAttributeId = 0;
+                if (uvLayer) {
+
+                    auto mode = uvLayer->GetMappingMode();
+                    assert(mode == FbxGeometryElement::eByControlPoint || mode == FbxGeometryElement::eByPolygonVertex);
+                    assert(uvLayer->GetReferenceMode() == FbxGeometryElement::eDirect);
+
+                    int p = 0;
+                    uvAttributeId = meshBuilder.AddAttribute(GeometryAttribute::TEX_COORD, 3, DT_FLOAT32);
+
+                    for (int i = 0; i < numIndices; i++) {
+
+                        FbxDouble* uv;
+                        int index = 0;
+                        if (uvLayer->GetMappingMode() == FbxLayerElement::eByControlPoint) {
+                            index = indices[i];
+                            uv = uvLayer->GetDirectArray().GetAt(index).mData;
+                            std::vector<float> coord{ (float)uv[0], (float)uv[1] };
+                            uvs[indices[i]] = coord;
+                        } else {
+
+                            index = i;
+                            uv = uvLayer->GetDirectArray().GetAt(index).mData;
+                            std::vector<float> coord{ (float)uv[0], (float)uv[1] };
+                            uvs[i] = coord;
+                        }
+
+                        //uv = uvLayer->GetDirectArray().GetAt(index).mData;
+                        //std::vector<float> coord{ (float)uv[0], (float)uv[1] };
+                        //uvs[i] = coord;
+                        //qCDebug(model_baking) << "UVs" << uvs[indices[i]];
+                        //qCDebug(model_baking) << "UV's" << uvs[indices[i]][0] << uvs[indices[i]][1];
+
+                        if ((i + 1) % 3 == 0) {
+
+                            meshBuilder.SetAttributeValuesForFace(uvAttributeId, FaceIndex(p),
+                                                                  uvs[indices[i - 2]].data(),
+                                                                  uvs[indices[i - 1]].data(),
+                                                                  uvs[indices[i]].data());
+
+                            ++p;
+                        }
+                    }
+
+                    //int x = -1;
+
+
+                    //for (int p = 0; p < numPolygons; ++p) {
+
+                    //    //if (p > numGeometry) break;
+
+                    //    int x1 = ++x;
+                    //    int x2 = ++x;
+                    //    int x3 = ++x;
+                    //    meshBuilder.SetAttributeValuesForFace(uvAttributeId, FaceIndex(p),
+                    //        uvs[indices[x1]].data(),
+                    //        uvs[indices[x2]].data(),
+                    //        uvs[indices[x3]].data());
+
+
+                    //}
+
+                }
+
+                // Adding Colors
+
+                auto colorLayer = mesh->GetElementVertexColor();
+                if (colorLayer) {
+
+                    auto mode = colorLayer->GetMappingMode();
+
+                    colors.assign(numIndices, { 0, 0, 0 });
+                    assert(mode == FbxGeometryElement::eByControlPoint || mode == FbxGeometryElement::eByPolygonVertex);
+                    assert(colorLayer->GetReferenceMode() == FbxGeometryElement::eDirect);
+
+                    const int colorAttributeId = meshBuilder.AddAttribute(GeometryAttribute::COLOR, 3, DT_FLOAT32);
+                    f = 0;
+
+                    for (int i = 0; i < numIndices; ++i) {
+
+                        int index = 0;
+                        if (mode == FbxLayerElement::eByControlPoint) {
+                            index = indices[i];
+
+                        } else {
+                            index = i;
+                        }
+
+                        auto color = colorLayer->GetDirectArray().GetAt(index);
+                        std::vector<float> v{ (float)color[0], (float)color[1], (float)color[2] };
+                        colors[indices[i]] = v;
+                        //qCDebug(model_baking) << "Colors" << v[0] << v[1] << v[2];
+
+                        if ((i + 1) % 3 == 0) {
+
+                            meshBuilder.SetAttributeValuesForFace(colorAttributeId, FaceIndex(f),
+                                                                  colors[indices[i - 2]].data(),
+                                                                  colors[indices[i - 1]].data(),
+                                                                  colors[indices[i]].data());
+
+                            f++;
+                        }
+
+                    }
+                }
+
+                //Finalize Draco Mesh
+
+                dracoMesh = meshBuilder.Finalize();
+
+                // Encoding Draco Mesh to a buffer 
+
+                draco::Encoder encoder;
+                draco::EncoderBuffer buffer;
+                encoder.EncodeMeshToBuffer(*dracoMesh, &buffer);
+
+                FbxNode* rootNode = _scene->GetRootNode();
+                FbxNode* customNode = FbxNode::Create(geometry, "Custom Node");
+                FbxBlob blob(buffer.data(), buffer.size());
+                FbxPropertyT<FbxBlob> property;
+                property = FbxProperty::Create(customNode, FbxBlobDT, "DracoProperty");
+                //qCDebug(model_baking) << "Out Buffer" << buffer.size();
+                property.Set(blob);
+
+                mesh->Reset();
+
+                const std::string &file_name = "C:/Users/utkarsh/Desktop/result.drc";
+                std::ofstream out_file(file_name, std::ios::binary);
+                out_file.write(buffer.data(), buffer.size());
+                qCDebug(model_baking) << "SizeBC" << buffer.size();
+            }
+
+
         }
+
+    } else {
+        handleError("Could not triangulate all node attributes that can be triangulated");
+        return;
     }
 
-    
-    
-
-
 }
-
 
 void FBXBaker::rewriteAndBakeSceneTextures() {
 
@@ -382,8 +627,8 @@ void FBXBaker::rewriteAndBakeSceneTextures() {
                             FbxFileTexture* fileTexture = property.GetSrcObject<FbxFileTexture>(j);
 
                             // use QFileInfo to easily split up the existing texture filename into its components
-                            QString fbxTextureFileName { fileTexture->GetFileName() };
-                            QFileInfo textureFileInfo { fbxTextureFileName.replace("\\", "/") };
+                            QString fbxTextureFileName{ fileTexture->GetFileName() };
+                            QFileInfo textureFileInfo{ fbxTextureFileName.replace("\\", "/") };
 
                             // make sure this texture points to something and isn't one we've already re-mapped
                             if (!textureFileInfo.filePath().isEmpty()
@@ -393,7 +638,7 @@ void FBXBaker::rewriteAndBakeSceneTextures() {
                                 // ensuring that the baked texture will have a unique name
                                 // even if there was another texture with the same name at a different path
                                 auto bakedTextureFileName = createBakedTextureFileName(textureFileInfo);
-                                QString bakedTextureFilePath {
+                                QString bakedTextureFilePath{
                                     _uniqueOutputPath + BAKED_OUTPUT_SUBFOLDER + bakedTextureFileName
                                 };
 
@@ -427,7 +672,7 @@ void FBXBaker::rewriteAndBakeSceneTextures() {
 
 void FBXBaker::bakeTexture(const QUrl& textureURL, image::TextureUsage::Type textureType, const QDir& outputDir) {
     // start a bake for this texture and add it to our list to keep track of
-    QSharedPointer<TextureBaker> bakingTexture {
+    QSharedPointer<TextureBaker> bakingTexture{
         new TextureBaker(textureURL, textureType, outputDir),
         &TextureBaker::deleteLater
     };
@@ -468,7 +713,7 @@ void FBXBaker::handleBakedTexture() {
                         // check if we have a relative path to use for the texture
                         auto relativeTexturePath = texturePathRelativeToFBX(_fbxURL, bakedTexture->getTextureURL());
 
-                        QFile originalTextureFile {
+                        QFile originalTextureFile{
                             _uniqueOutputPath + ORIGINAL_OUTPUT_SUBFOLDER + relativeTexturePath + bakedTexture->getTextureURL().fileName()
                         };
 
@@ -478,7 +723,7 @@ void FBXBaker::handleBakedTexture() {
 
                         if (originalTextureFile.open(QIODevice::WriteOnly) && originalTextureFile.write(bakedTexture->getOriginalTexture()) != -1) {
                             qCDebug(model_baking) << "Saved original texture file" << originalTextureFile.fileName()
-                            << "for" << _fbxURL;
+                                << "for" << _fbxURL;
                         } else {
                             handleError("Could not save original external texture " + originalTextureFile.fileName()
                                         + " for " + _fbxURL.toString());
@@ -495,13 +740,13 @@ void FBXBaker::handleBakedTexture() {
             } else {
                 // there was an error baking this texture - add it to our list of errors
                 _errorList.append(bakedTexture->getErrors());
-                
+
                 // we don't emit finished yet so that the other textures can finish baking first
                 _pendingErrorEmission = true;
-                
+
                 // now that this texture has been baked, even though it failed, we can remove that TextureBaker from our list
                 _bakingTextures.remove(bakedTexture->getTextureURL());
-                
+
                 checkIfTexturesFinished();
             }
         } else {
@@ -535,7 +780,6 @@ void FBXBaker::exportScene() {
 
     // export the scene
     exporter->Export(_scene);
-
     qCDebug(model_baking) << "Exported" << _fbxURL << "with re-written paths to" << rewrittenFBXPath;
 }
 

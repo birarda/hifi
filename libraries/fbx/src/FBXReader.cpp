@@ -34,16 +34,24 @@
 #include "FBXReader.h"
 #include "ModelFormatLogging.h"
 
+#include "draco\io\obj_decoder.h"
+#include "draco\compression\decode.h"
+#include "draco\io\obj_encoder.h"
+#include <fstream>
+
+
+
 // TOOL: Uncomment the following line to enable the filtering of all the unkwnon fields of a node so we can break point easily while loading a model with problems...
 //#define DEBUG_FBXREADER
 
 using namespace std;
 
 int FBXGeometryPointerMetaTypeId = qRegisterMetaType<FBXGeometry::Pointer>();
+ExtractedMesh extractDracoMesh(draco::Mesh* mesh, unsigned int& meshIndex);
 
 QStringList FBXGeometry::getJointNames() const {
     QStringList names;
-    foreach (const FBXJoint& joint, joints) {
+    foreach(const FBXJoint& joint, joints) {
         names.append(joint.name);
     }
     return names;
@@ -51,7 +59,7 @@ QStringList FBXGeometry::getJointNames() const {
 
 bool FBXGeometry::hasBlendedMeshes() const {
     if (!meshes.isEmpty()) {
-        foreach (const FBXMesh& mesh, meshes) {
+        foreach(const FBXMesh& mesh, meshes) {
             if (!mesh.blendshapes.isEmpty()) {
                 return true;
             }
@@ -82,15 +90,15 @@ bool FBXGeometry::convexHullContains(const glm::vec3& point) const {
         // Check whether the point is "behind" all the primitives.
         int verticesSize = mesh.vertices.size();
         for (int j = 0;
-             j < indices.size() - 2; // -2 in case the vertices aren't the right size -- we access j + 2 below
-             j += primitiveSize) {
+            j < indices.size() - 2; // -2 in case the vertices aren't the right size -- we access j + 2 below
+            j += primitiveSize) {
             if (indices[j] < verticesSize &&
                 indices[j + 1] < verticesSize &&
                 indices[j + 2] < verticesSize &&
                 !isPointBehindTrianglesPlane(point,
-                                             mesh.vertices[indices[j]],
-                                             mesh.vertices[indices[j + 1]],
-                                             mesh.vertices[indices[j + 2]])) {
+                    mesh.vertices[indices[j]],
+                    mesh.vertices[indices[j + 1]],
+                    mesh.vertices[indices[j + 2]])) {
                 // it's not behind at least one so we bail
                 return false;
             }
@@ -158,7 +166,8 @@ QString getName(const QVariantList& properties) {
     if (properties.size() == 3) {
         name = properties.at(1).toString();
         name = processID(name.left(name.indexOf(QChar('\0'))));
-    } else {
+    }
+    else {
         name = processID(properties.at(0).toString());
     }
     return name;
@@ -210,7 +219,7 @@ public:
 };
 
 glm::mat4 getGlobalTransform(const QMultiMap<QString, QString>& _connectionParentMap,
-        const QHash<QString, FBXModel>& models, QString nodeID, bool mixamoHack, const QString& url) {
+    const QHash<QString, FBXModel>& models, QString nodeID, bool mixamoHack, const QString& url) {
     glm::mat4 globalTransform;
     QVector<QString> visitedNodes; // Used to prevent following a cycle
     while (!nodeID.isNull()) {
@@ -225,7 +234,7 @@ glm::mat4 getGlobalTransform(const QMultiMap<QString, QString>& _connectionParen
         }
         QList<QString> parentIDs = _connectionParentMap.values(nodeID);
         nodeID = QString();
-        foreach (const QString& parentID, parentIDs) {
+        foreach(const QString& parentID, parentIDs) {
             if (visitedNodes.contains(parentID)) {
                 qCWarning(modelformat) << "Ignoring loop detected in FBX connection map for" << url;
                 continue;
@@ -253,11 +262,11 @@ void printNode(const FBXNode& node, int indentLevel) {
     QDebug nodeDebug = qDebug(modelformat);
 
     nodeDebug.nospace() << spaces.data() << node.name.data() << ": ";
-    foreach (const QVariant& property, node.properties) {
+    foreach(const QVariant& property, node.properties) {
         nodeDebug << property;
     }
 
-    foreach (const FBXNode& child, node.children) {
+    foreach(const FBXNode& child, node.children) {
         printNode(child, indentLevel + 1);
     }
 }
@@ -270,13 +279,13 @@ public:
 };
 
 void appendModelIDs(const QString& parentID, const QMultiMap<QString, QString>& connectionChildMap,
-        QHash<QString, FBXModel>& models, QSet<QString>& remainingModels, QVector<QString>& modelIDs) {
+    QHash<QString, FBXModel>& models, QSet<QString>& remainingModels, QVector<QString>& modelIDs) {
     if (remainingModels.contains(parentID)) {
         modelIDs.append(parentID);
         remainingModels.remove(parentID);
     }
     int parentIndex = modelIDs.size() - 1;
-    foreach (const QString& childID, connectionChildMap.values(parentID)) {
+    foreach(const QString& childID, connectionChildMap.values(parentID)) {
         if (remainingModels.contains(childID)) {
             FBXModel& model = models[childID];
             if (model.parentIndex == -1) {
@@ -289,14 +298,16 @@ void appendModelIDs(const QString& parentID, const QMultiMap<QString, QString>& 
 
 FBXBlendshape extractBlendshape(const FBXNode& object) {
     FBXBlendshape blendshape;
-    foreach (const FBXNode& data, object.children) {
+    foreach(const FBXNode& data, object.children) {
         if (data.name == "Indexes") {
             blendshape.indices = FBXReader::getIntVector(data);
 
-        } else if (data.name == "Vertices") {
+        }
+        else if (data.name == "Vertices") {
             blendshape.vertices = FBXReader::createVec3Vector(FBXReader::getDoubleVector(data));
 
-        } else if (data.name == "Normals") {
+        }
+        else if (data.name == "Normals") {
             blendshape.normals = FBXReader::createVec3Vector(FBXReader::getDoubleVector(data));
         }
     }
@@ -318,7 +329,7 @@ void setTangents(FBXMesh& mesh, int firstIndex, int secondIndex) {
 
 QVector<int> getIndices(const QVector<QString> ids, QVector<QString> modelIDs) {
     QVector<int> indices;
-    foreach (const QString& id, ids) {
+    foreach(const QString& id, ids) {
         int index = modelIDs.indexOf(id);
         if (index != -1) {
             indices.append(index);
@@ -330,7 +341,7 @@ QVector<int> getIndices(const QVector<QString> ids, QVector<QString> modelIDs) {
 typedef QPair<int, float> WeightedIndex;
 
 void addBlendshapes(const ExtractedBlendshape& extracted, const QList<WeightedIndex>& indices, ExtractedMesh& extractedMesh) {
-    foreach (const WeightedIndex& index, indices) {
+    foreach(const WeightedIndex& index, indices) {
         extractedMesh.mesh.blendshapes.resize(max(extractedMesh.mesh.blendshapes.size(), index.first + 1));
         extractedMesh.blendshapeIndexMaps.resize(extractedMesh.mesh.blendshapes.size());
         FBXBlendshape& blendshape = extractedMesh.mesh.blendshapes[index.first];
@@ -338,14 +349,15 @@ void addBlendshapes(const ExtractedBlendshape& extracted, const QList<WeightedIn
         for (int i = 0; i < extracted.blendshape.indices.size(); i++) {
             int oldIndex = extracted.blendshape.indices.at(i);
             for (QMultiHash<int, int>::const_iterator it = extractedMesh.newIndices.constFind(oldIndex);
-                    it != extractedMesh.newIndices.constEnd() && it.key() == oldIndex; it++) {
+                it != extractedMesh.newIndices.constEnd() && it.key() == oldIndex; it++) {
                 QHash<int, int>::iterator blendshapeIndex = blendshapeIndexMap.find(it.value());
                 if (blendshapeIndex == blendshapeIndexMap.end()) {
                     blendshapeIndexMap.insert(it.value(), blendshape.indices.size());
                     blendshape.indices.append(it.value());
                     blendshape.vertices.append(extracted.blendshape.vertices.at(i) * index.second);
                     blendshape.normals.append(extracted.blendshape.normals.at(i) * index.second);
-                } else {
+                }
+                else {
                     blendshape.vertices[*blendshapeIndex] += extracted.blendshape.vertices.at(i) * index.second;
                     blendshape.normals[*blendshapeIndex] += extracted.blendshape.normals.at(i) * index.second;
                 }
@@ -355,26 +367,26 @@ void addBlendshapes(const ExtractedBlendshape& extracted, const QList<WeightedIn
 }
 
 QString getTopModelID(const QMultiMap<QString, QString>& connectionParentMap,
-        const QHash<QString, FBXModel>& models, const QString& modelID, const QString& url) {
+    const QHash<QString, FBXModel>& models, const QString& modelID, const QString& url) {
     QString topID = modelID;
     QVector<QString> visitedNodes; // Used to prevent following a cycle
-    forever {
+    forever{
         visitedNodes.append(topID); // Append each node we visit
 
-        foreach (const QString& parentID, connectionParentMap.values(topID)) {
-            if (visitedNodes.contains(parentID)) {
-                qCWarning(modelformat) << "Ignoring loop detected in FBX connection map for" << url;
-                continue;
-            }
-
-            if (models.contains(parentID)) {
-                topID = parentID;
-                goto outerContinue;
-            }
+    foreach(const QString& parentID, connectionParentMap.values(topID)) {
+        if (visitedNodes.contains(parentID)) {
+            qCWarning(modelformat) << "Ignoring loop detected in FBX connection map for" << url;
+            continue;
         }
-        return topID;
 
-        outerContinue: ;
+        if (models.contains(parentID)) {
+            topID = parentID;
+            goto outerContinue;
+        }
+    }
+    return topID;
+
+outerContinue:;
     }
 }
 
@@ -392,9 +404,9 @@ public:
 };
 
 bool checkMaterialsHaveTextures(const QHash<QString, FBXMaterial>& materials,
-        const QHash<QString, QByteArray>& textureFilenames, const QMultiMap<QString, QString>& _connectionChildMap) {
-    foreach (const QString& materialID, materials.keys()) {
-        foreach (const QString& childID, _connectionChildMap.values(materialID)) {
+    const QHash<QString, QByteArray>& textureFilenames, const QMultiMap<QString, QString>& _connectionChildMap) {
+    foreach(const QString& materialID, materials.keys()) {
+        foreach(const QString& childID, _connectionChildMap.values(materialID)) {
             if (textureFilenames.contains(childID)) {
                 return true;
             }
@@ -406,7 +418,8 @@ bool checkMaterialsHaveTextures(const QHash<QString, FBXMaterial>& materials,
 int matchTextureUVSetToAttributeChannel(const QString& texUVSetName, const QHash<QString, int>& texcoordChannels) {
     if (texUVSetName.isEmpty()) {
         return 0;
-    } else {
+    }
+    else {
         QHash<QString, int>::const_iterator tcUnit = texcoordChannels.find(texUVSetName);
         if (tcUnit != texcoordChannels.end()) {
             int channel = (*tcUnit);
@@ -414,7 +427,8 @@ int matchTextureUVSetToAttributeChannel(const QString& texUVSetName, const QHash
                 channel = 0;
             }
             return channel;
-        } else {
+        }
+        else {
             return 0;
         }
     }
@@ -423,23 +437,25 @@ int matchTextureUVSetToAttributeChannel(const QString& texUVSetName, const QHash
 
 FBXLight extractLight(const FBXNode& object) {
     FBXLight light;
-    foreach (const FBXNode& subobject, object.children) {
+    foreach(const FBXNode& subobject, object.children) {
         QString childname = QString(subobject.name);
         if (subobject.name == "Properties70") {
-            foreach (const FBXNode& property, subobject.children) {
+            foreach(const FBXNode& property, subobject.children) {
                 int valIndex = 4;
                 QString propName = QString(property.name);
                 if (property.name == "P") {
                     QString propname = property.properties.at(0).toString();
                     if (propname == "Intensity") {
                         light.intensity = 0.01f * property.properties.at(valIndex).value<float>();
-                    } else if (propname == "Color") {
+                    }
+                    else if (propname == "Color") {
                         light.color = FBXReader::getVec3(property.properties, valIndex);
                     }
                 }
             }
-        } else if ( subobject.name == "GeometryVersion"
-                   || subobject.name == "TypeFlags") {
+        }
+        else if (subobject.name == "GeometryVersion"
+            || subobject.name == "TypeFlags") {
         }
     }
 #if defined(DEBUG_FBXREADER)
@@ -448,7 +464,7 @@ FBXLight extractLight(const FBXNode& object) {
     type = object.properties.at(1).toString();
     type = object.properties.at(2).toString();
 
-    foreach (const QVariant& prop, object.properties) {
+    foreach(const QVariant& prop, object.properties) {
         QString proptype = prop.typeName();
         QString propval = prop.toString();
         if (proptype == "Properties70") {
@@ -477,7 +493,7 @@ FBXGeometry* FBXReader::extractFBXGeometry(const QVariantHash& mapping, const QS
     QVector<ExtractedBlendshape> blendshapes;
 
     QHash<QString, FBXModel> models;
-    QHash<QString, Cluster> clusters; 
+    QHash<QString, Cluster> clusters;
     QHash<QString, AnimationCurve> animationCurves;
 
     QHash<QString, QString> typeFlags;
@@ -532,11 +548,12 @@ FBXGeometry* FBXReader::extractFBXGeometry(const QVariantHash& mapping, const QS
         QList<QVariant> mappings = blendshapeMappings.values(blendshapeName);
         if (mappings.isEmpty()) {
             blendshapeIndices.insert(blendshapeName, WeightedIndex(i, 1.0f));
-        } else {
-            foreach (const QVariant& mapping, mappings) {
+        }
+        else {
+            foreach(const QVariant& mapping, mappings) {
                 QVariantList blendshapeMapping = mapping.toList();
                 blendshapeIndices.insert(blendshapeMapping.at(0).toByteArray(),
-                   WeightedIndex(i, blendshapeMapping.at(1).toFloat()));
+                    WeightedIndex(i, blendshapeMapping.at(1).toFloat()));
             }
         }
     }
@@ -553,23 +570,25 @@ FBXGeometry* FBXReader::extractFBXGeometry(const QVariantHash& mapping, const QS
     glm::vec3 ambientColor;
     QString hifiGlobalNodeID;
     unsigned int meshIndex = 0;
-    foreach (const FBXNode& child, node.children) {
+
+    foreach(const FBXNode& child, node.children) {
 
         if (child.name == "FBXHeaderExtension") {
-            foreach (const FBXNode& object, child.children) {
+            foreach(const FBXNode& object, child.children) {
                 if (object.name == "SceneInfo") {
-                    foreach (const FBXNode& subobject, object.children) {
+                    foreach(const FBXNode& subobject, object.children) {
                         if (subobject.name == "MetaData") {
-                            foreach (const FBXNode& subsubobject, subobject.children) {
+                            foreach(const FBXNode& subsubobject, subobject.children) {
                                 if (subsubobject.name == "Author") {
                                     geometry.author = subsubobject.properties.at(0).toString();
                                 }
                             }
-                        } else if (subobject.name == "Properties70") {
-                            foreach (const FBXNode& subsubobject, subobject.children) {
+                        }
+                        else if (subobject.name == "Properties70") {
+                            foreach(const FBXNode& subsubobject, subobject.children) {
                                 static const QVariant APPLICATION_NAME = QVariant(QByteArray("Original|ApplicationName"));
                                 if (subsubobject.name == "P" && subsubobject.properties.size() >= 5 &&
-                                        subsubobject.properties.at(0) == APPLICATION_NAME) {
+                                    subsubobject.properties.at(0) == APPLICATION_NAME) {
                                     geometry.applicationName = subsubobject.properties.at(4).toString();
                                 }
                             }
@@ -577,40 +596,48 @@ FBXGeometry* FBXReader::extractFBXGeometry(const QVariantHash& mapping, const QS
                     }
                 }
             }
-        } else if (child.name == "GlobalSettings") {
-            foreach (const FBXNode& object, child.children) {
+        }
+        else if (child.name == "GlobalSettings") {
+            foreach(const FBXNode& object, child.children) {
                 if (object.name == "Properties70") {
                     QString propertyName = "P";
                     int index = 4;
-                    foreach (const FBXNode& subobject, object.children) {
+                    foreach(const FBXNode& subobject, object.children) {
                         if (subobject.name == propertyName) {
                             static const QVariant UNIT_SCALE_FACTOR = QByteArray("UnitScaleFactor");
                             static const QVariant AMBIENT_COLOR = QByteArray("AmbientColor");
                             const auto& subpropName = subobject.properties.at(0);
                             if (subpropName == UNIT_SCALE_FACTOR) {
                                 unitScaleFactor = subobject.properties.at(index).toFloat();
-                            } else if (subpropName == AMBIENT_COLOR) {
+                            }
+                            else if (subpropName == AMBIENT_COLOR) {
                                 ambientColor = getVec3(subobject.properties, index);
                             }
                         }
                     }
                 }
             }
-        } else if (child.name == "Objects") {
-            foreach (const FBXNode& object, child.children) {
+        }
+        else if (child.name == "Objects") {
+            foreach(const FBXNode& object, child.children) {
                 if (object.name == "Geometry") {
                     if (object.properties.at(2) == "Mesh") {
+                        
                         meshes.insert(getID(object.properties), extractMesh(object, meshIndex));
-                    } else { // object.properties.at(2) == "Shape"
+                        
+                    }
+                    else { // object.properties.at(2) == "Shape"
                         ExtractedBlendshape extracted = { getID(object.properties), extractBlendshape(object) };
                         blendshapes.append(extracted);
                     }
-                } else if (object.name == "Model") {
+                }
+                else if (object.name == "Model") {
+
                     QString name = getName(object.properties);
                     QString id = getID(object.properties);
                     modelIDsToNames.insert(id, name);
-
                     QString modelname = name.toLower();
+
                     if (modelname.startsWith("hifi")) {
                         hifiGlobalNodeID = id;
                     }
@@ -618,31 +645,40 @@ FBXGeometry* FBXReader::extractFBXGeometry(const QVariantHash& mapping, const QS
                     if (name == jointEyeLeftName || name == "EyeL" || name == "joint_Leye") {
                         jointEyeLeftID = getID(object.properties);
 
-                    } else if (name == jointEyeRightName || name == "EyeR" || name == "joint_Reye") {
+                    }
+                    else if (name == jointEyeRightName || name == "EyeR" || name == "joint_Reye") {
                         jointEyeRightID = getID(object.properties);
 
-                    } else if (name == jointNeckName || name == "NeckRot" || name == "joint_neck") {
+                    }
+                    else if (name == jointNeckName || name == "NeckRot" || name == "joint_neck") {
                         jointNeckID = getID(object.properties);
 
-                    } else if (name == jointRootName) {
+                    }
+                    else if (name == jointRootName) {
                         jointRootID = getID(object.properties);
 
-                    } else if (name == jointLeanName) {
+                    }
+                    else if (name == jointLeanName) {
                         jointLeanID = getID(object.properties);
 
-                    } else if (name == jointHeadName) {
+                    }
+                    else if (name == jointHeadName) {
                         jointHeadID = getID(object.properties);
 
-                    } else if (name == jointLeftHandName || name == "LeftHand" || name == "joint_L_hand") {
+                    }
+                    else if (name == jointLeftHandName || name == "LeftHand" || name == "joint_L_hand") {
                         jointLeftHandID = getID(object.properties);
 
-                    } else if (name == jointRightHandName || name == "RightHand" || name == "joint_R_hand") {
+                    }
+                    else if (name == jointRightHandName || name == "RightHand" || name == "joint_R_hand") {
                         jointRightHandID = getID(object.properties);
 
-                    } else if (name == "LeftToe" || name == "joint_L_toe" || name == "LeftToe_End") {
+                    }
+                    else if (name == "LeftToe" || name == "joint_L_toe" || name == "LeftToe_End") {
                         jointLeftToeID = getID(object.properties);
 
-                    } else if (name == "RightToe" || name == "joint_R_toe" || name == "RightToe_End") {
+                    }
+                    else if (name == "RightToe" || name == "joint_R_toe" || name == "RightToe_End") {
                         jointRightToeID = getID(object.properties);
                     }
 
@@ -668,20 +704,24 @@ FBXGeometry* FBXReader::extractFBXGeometry(const QVariantHash& mapping, const QS
 
                     glm::vec3 rotationMin, rotationMax;
                     FBXModel model = { name, -1, glm::vec3(), glm::mat4(), glm::quat(), glm::quat(), glm::quat(),
-                                       glm::mat4(), glm::vec3(), glm::vec3(),
-                                       false, glm::vec3(), glm::quat(), glm::vec3(1.0f) };
+                        glm::mat4(), glm::vec3(), glm::vec3(),
+                        false, glm::vec3(), glm::quat(), glm::vec3(1.0f) };
                     ExtractedMesh* mesh = NULL;
                     QVector<ExtractedBlendshape> blendshapes;
-                    foreach (const FBXNode& subobject, object.children) {
+                    foreach(const FBXNode& subobject, object.children) {
                         bool properties = false;
                         QByteArray propertyName;
                         int index;
+                        /*if (subobject.isDracoNode) {
+                        qCDebug(modelformat) << "Draco Node" << subobject.dracoArray;
+                        }*/
                         if (subobject.name == "Properties60") {
                             properties = true;
                             propertyName = "Property";
                             index = 3;
 
-                        } else if (subobject.name == "Properties70") {
+                        }
+                        else if (subobject.name == "Properties70") {
                             properties = true;
                             propertyName = "P";
                             index = 4;
@@ -707,79 +747,157 @@ FBXGeometry* FBXReader::extractFBXGeometry(const QVariantHash& mapping, const QS
                             static const QVariant SCALING_PIVOT = QByteArray("ScalingPivot");
                             static const QVariant PRE_ROTATION = QByteArray("PreRotation");
                             static const QVariant POST_ROTATION = QByteArray("PostRotation");
+                            
                             foreach(const FBXNode& property, subobject.children) {
                                 const auto& childProperty = property.properties.at(0);
+                                //if (property.isDracoNode) {
+                                //    draco::Decoder decoder;
+                                //    draco::DecoderBuffer decodedBuffer;
+                                //    decodedBuffer.Init(property.dracoArray.data(), property.dracoArray.size());
+                                //    //char * buffer = new char[1107];
+
+                                //   // ifstream f;
+                                //   // f.open("C:/Users/utkarsh/Desktop/result.drc");
+                                //   ///* f.read(buffer, 1107);
+                                //   // decodedBuffer.Init(buffer, 1107);*/
+                                //   // f.read(buffer, 162);
+                                //   // decodedBuffer.Init(buffer, 162);
+
+                                //    std::unique_ptr<draco::Mesh> dracoMesh(new draco::Mesh());
+                                //    decoder.DecodeBufferToGeometry(&decodedBuffer, dracoMesh.get());
+                                //    meshes.insert(getID(property.properties), extractDracoMesh(dracoMesh.get(), meshIndex));
+                                //    
+
+                                    /*int propertyIndex = 0;
+                                    
+                                    int count = property.dracoArray.count("DRACO");
+                                    int endPos = 0;
+                                    int length = 0;
+
+                                    for (int i = 0;i < count;i++) {
+                                        
+                                        int startPos = property.dracoArray.indexOf("DRACO",endPos);
+                                        
+                                        endPos = property.dracoArray.indexOf("DRACO", startPos+1);
+                                        if (endPos != -1) {
+                                            length = endPos - startPos;
+                                        } else {
+                                            length = -1;
+                                        }
+                                        
+                                        draco::Decoder decoder;
+                                        draco::DecoderBuffer decodedBuffer;
+                                        QByteArray tempArray = property.dracoArray.mid(startPos, length);
+                                        
+                                        decodedBuffer.Init(tempArray.data(), tempArray.size());
+                                      
+                                        std::unique_ptr<draco::Mesh> dracoMesh(new draco::Mesh());
+                                        decoder.DecodeBufferToGeometry(&decodedBuffer, dracoMesh.get());
+                                        if (i == 0)  str = "DracoProperty";
+                                        if (i == 1)  str = "DracoProperty1";
+                                        if (i == 2)  str = "DracoProperty2";
+
+                                        meshes.insert(str, extractDracoMesh(dracoMesh.get(), meshIndex));
+                                        qCDebug(modelformat) << "ID" << getID(property.properties);
+                                        qCDebug(modelformat) << "Index" << meshIndex;
+                                    }*/
+
+                               // }
                                 if (property.name == propertyName) {
                                     if (childProperty == LCL_TRANSLATION) {
                                         translation = getVec3(property.properties, index);
 
-                                    } else if (childProperty == ROTATION_OFFSET) {
+                                    }
+                                    else if (childProperty == ROTATION_OFFSET) {
                                         rotationOffset = getVec3(property.properties, index);
 
-                                    } else if (childProperty == ROTATION_PIVOT) {
+                                    }
+                                    else if (childProperty == ROTATION_PIVOT) {
                                         rotationPivot = getVec3(property.properties, index);
 
-                                    } else if (childProperty == PRE_ROTATION) {
+                                    }
+                                    else if (childProperty == PRE_ROTATION) {
                                         preRotation = getVec3(property.properties, index);
 
-                                    } else if (childProperty == LCL_ROTATION) {
+                                    }
+                                    else if (childProperty == LCL_ROTATION) {
                                         rotation = getVec3(property.properties, index);
 
-                                    } else if (childProperty == POST_ROTATION) {
+                                    }
+                                    else if (childProperty == POST_ROTATION) {
                                         postRotation = getVec3(property.properties, index);
 
-                                    } else if (childProperty == SCALING_PIVOT) {
+                                    }
+                                    else if (childProperty == SCALING_PIVOT) {
                                         scalePivot = getVec3(property.properties, index);
 
-                                    } else if (childProperty == LCL_SCALING) {
+                                    }
+                                    else if (childProperty == LCL_SCALING) {
                                         scale = getVec3(property.properties, index);
 
-                                    } else if (childProperty == SCALING_OFFSET) {
+                                    }
+                                    else if (childProperty == SCALING_OFFSET) {
                                         scaleOffset = getVec3(property.properties, index);
 
-                                    // NOTE: these rotation limits are stored in degrees (NOT radians)
-                                    } else if (childProperty == ROTATION_MIN) {
+                                        // NOTE: these rotation limits are stored in degrees (NOT radians)
+                                    }
+                                    else if (childProperty == ROTATION_MIN) {
                                         rotationMin = getVec3(property.properties, index);
 
-                                    } else if (childProperty == ROTATION_MAX) {
+                                    }
+                                    else if (childProperty == ROTATION_MAX) {
                                         rotationMax = getVec3(property.properties, index);
 
-                                    } else if (childProperty == ROTATION_MIN_X) {
+                                    }
+                                    else if (childProperty == ROTATION_MIN_X) {
                                         rotationMinX = property.properties.at(index).toBool();
 
-                                    } else if (childProperty == ROTATION_MIN_Y) {
+                                    }
+                                    else if (childProperty == ROTATION_MIN_Y) {
                                         rotationMinY = property.properties.at(index).toBool();
 
-                                    } else if (childProperty == ROTATION_MIN_Z) {
+                                    }
+                                    else if (childProperty == ROTATION_MIN_Z) {
                                         rotationMinZ = property.properties.at(index).toBool();
 
-                                    } else if (childProperty == ROTATION_MAX_X) {
+                                    }
+                                    else if (childProperty == ROTATION_MAX_X) {
                                         rotationMaxX = property.properties.at(index).toBool();
 
-                                    } else if (childProperty == ROTATION_MAX_Y) {
+                                    }
+                                    else if (childProperty == ROTATION_MAX_Y) {
                                         rotationMaxY = property.properties.at(index).toBool();
 
-                                    } else if (childProperty == ROTATION_MAX_Z) {
+                                    }
+                                    else if (childProperty == ROTATION_MAX_Z) {
                                         rotationMaxZ = property.properties.at(index).toBool();
-                                    } else if (childProperty == GEOMETRIC_TRANSLATION) {
+                                    }
+                                    else if (childProperty == GEOMETRIC_TRANSLATION) {
                                         geometricTranslation = getVec3(property.properties, index);
                                         hasGeometricOffset = true;
-                                    } else if (childProperty == GEOMETRIC_ROTATION) {
+                                    }
+                                    else if (childProperty == GEOMETRIC_ROTATION) {
                                         geometricRotation = getVec3(property.properties, index);
                                         hasGeometricOffset = true;
-                                    } else if (childProperty == GEOMETRIC_SCALING) {
+                                    }
+                                    else if (childProperty == GEOMETRIC_SCALING) {
+                                        qCDebug(modelformat) << "Index " << index;
+                                        qCDebug(modelformat) << "Property" << property.properties;
                                         geometricScaling = getVec3(property.properties, index);
                                         hasGeometricOffset = true;
                                     }
+
                                 }
                             }
-                        } else if (subobject.name == "Vertices") {
+                        }
+                        else if (subobject.name == "Vertices") {
                             // it's a mesh as well as a model
                             mesh = &meshes[getID(object.properties)];
                             *mesh = extractMesh(object, meshIndex);
 
-                        } else if (subobject.name == "Shape") {
-                            ExtractedBlendshape blendshape =  { subobject.properties.at(0).toString(),
+                        }
+                        else if (subobject.name == "Shape") {
+                            ExtractedBlendshape blendshape = { subobject.properties.at(0).toString(),
                                 extractBlendshape(subobject) };
                             blendshapes.append(blendshape);
                         }
@@ -789,14 +907,15 @@ FBXGeometry* FBXReader::extractFBXGeometry(const QVariantHash& mapping, const QS
                             if (!attributetype.empty()) {
                                 if (attributetype == "Light") {
                                     QString lightprop;
-                                    foreach (const QVariant& vprop, subobject.properties) {
+                                    foreach(const QVariant& vprop, subobject.properties) {
                                         lightprop = vprop.toString();
                                     }
 
                                     FBXLight light = extractLight(object);
                                 }
                             }
-                        } else {
+                        }
+                        else {
                             QString whatisthat = subobject.name;
                             if (whatisthat == "Shape") {
                             }
@@ -806,7 +925,7 @@ FBXGeometry* FBXReader::extractFBXGeometry(const QVariantHash& mapping, const QS
 
                     // add the blendshapes included in the model, if any
                     if (mesh) {
-                        foreach (const ExtractedBlendshape& extracted, blendshapes) {
+                        foreach(const ExtractedBlendshape& extracted, blendshapes) {
                             addBlendshapes(extracted, blendshapeIndices.values(extracted.id.toLatin1()), *mesh);
                         }
                     }
@@ -833,9 +952,10 @@ FBXGeometry* FBXReader::extractFBXGeometry(const QVariantHash& mapping, const QS
                     model.geometricScaling = geometricScaling;
 
                     models.insert(getID(object.properties), model);
-                } else if (object.name == "Texture") {
+                }
+                else if (object.name == "Texture") {
                     TextureParam tex;
-                    foreach (const FBXNode& subobject, object.children) {
+                    foreach(const FBXNode& subobject, object.children) {
                         const int RELATIVE_FILENAME_MIN_SIZE = 1;
                         const int TEXTURE_NAME_MIN_SIZE = 1;
                         const int TEXTURE_ALPHA_SOURCE_MIN_SIZE = 1;
@@ -848,83 +968,98 @@ FBXGeometry* FBXReader::extractFBXGeometry(const QVariantHash& mapping, const QS
                             filename = fileOnUrl(filepath, url);
                             _textureFilepaths.insert(getID(object.properties), filepath);
                             _textureFilenames.insert(getID(object.properties), filename);
-                        } else if (subobject.name == "TextureName" && subobject.properties.length() >= TEXTURE_NAME_MIN_SIZE) {
+                        }
+                        else if (subobject.name == "TextureName" && subobject.properties.length() >= TEXTURE_NAME_MIN_SIZE) {
                             // trim the name from the timestamp
                             QString name = QString(subobject.properties.at(0).toByteArray());
                             name = name.left(name.indexOf('['));
                             _textureNames.insert(getID(object.properties), name);
-                        } else if (subobject.name == "Texture_Alpha_Source" && subobject.properties.length() >= TEXTURE_ALPHA_SOURCE_MIN_SIZE) {
+                        }
+                        else if (subobject.name == "Texture_Alpha_Source" && subobject.properties.length() >= TEXTURE_ALPHA_SOURCE_MIN_SIZE) {
                             tex.assign<uint8_t>(tex.alphaSource, subobject.properties.at(0).value<int>());
-                        } else if (subobject.name == "ModelUVTranslation" && subobject.properties.length() >= MODEL_UV_TRANSLATION_MIN_SIZE) {
+                        }
+                        else if (subobject.name == "ModelUVTranslation" && subobject.properties.length() >= MODEL_UV_TRANSLATION_MIN_SIZE) {
                             tex.assign(tex.UVTranslation, glm::vec2(subobject.properties.at(0).value<double>(),
-                                                                    subobject.properties.at(1).value<double>()));
-                        } else if (subobject.name == "ModelUVScaling" && subobject.properties.length() >= MODEL_UV_SCALING_MIN_SIZE) {
+                                subobject.properties.at(1).value<double>()));
+                        }
+                        else if (subobject.name == "ModelUVScaling" && subobject.properties.length() >= MODEL_UV_SCALING_MIN_SIZE) {
                             tex.assign(tex.UVScaling, glm::vec2(subobject.properties.at(0).value<double>(),
-                                                                subobject.properties.at(1).value<double>()));
+                                subobject.properties.at(1).value<double>()));
                             if (tex.UVScaling.x == 0.0f) {
                                 tex.UVScaling.x = 1.0f;
                             }
                             if (tex.UVScaling.y == 0.0f) {
                                 tex.UVScaling.y = 1.0f;
                             }
-                        } else if (subobject.name == "Cropping" && subobject.properties.length() >= CROPPING_MIN_SIZE) {
+                        }
+                        else if (subobject.name == "Cropping" && subobject.properties.length() >= CROPPING_MIN_SIZE) {
                             tex.assign(tex.cropping, glm::vec4(subobject.properties.at(0).value<int>(),
-                                                                subobject.properties.at(1).value<int>(),
-                                                                subobject.properties.at(2).value<int>(),
-                                                                subobject.properties.at(3).value<int>()));
-                        } else if (subobject.name == "Properties70") {
+                                subobject.properties.at(1).value<int>(),
+                                subobject.properties.at(2).value<int>(),
+                                subobject.properties.at(3).value<int>()));
+                        }
+                        else if (subobject.name == "Properties70") {
                             QByteArray propertyName;
                             int index;
-                                propertyName = "P";
-                                index = 4;
-                                foreach (const FBXNode& property, subobject.children) {
-                                    static const QVariant UV_SET = QByteArray("UVSet");
-                                    static const QVariant CURRENT_TEXTURE_BLEND_MODE = QByteArray("CurrentTextureBlendMode");
-                                    static const QVariant USE_MATERIAL = QByteArray("UseMaterial");
-                                    static const QVariant TRANSLATION = QByteArray("Translation");
-                                    static const QVariant ROTATION = QByteArray("Rotation");
-                                    static const QVariant SCALING = QByteArray("Scaling");
-                                    if (property.name == propertyName) {
-                                        QString v = property.properties.at(0).toString();
-                                        if (property.properties.at(0) == UV_SET) {
-                                            std::string uvName = property.properties.at(index).toString().toStdString();
-                                            tex.assign(tex.UVSet, property.properties.at(index).toString());
-                                        } else if (property.properties.at(0) == CURRENT_TEXTURE_BLEND_MODE) {
-                                            tex.assign<uint8_t>(tex.currentTextureBlendMode, property.properties.at(index).value<int>());
-                                        } else if (property.properties.at(0) == USE_MATERIAL) {
-                                            tex.assign<bool>(tex.useMaterial, property.properties.at(index).value<int>());
-                                        } else if (property.properties.at(0) == TRANSLATION) {
-                                            tex.assign(tex.translation, getVec3(property.properties, index));
-                                        } else if (property.properties.at(0) == ROTATION) {
-                                            tex.assign(tex.rotation, getVec3(property.properties, index));
-                                        } else if (property.properties.at(0) == SCALING) {
-                                            tex.assign(tex.scaling, getVec3(property.properties, index));
-                                            if (tex.scaling.x == 0.0f) {
-                                                tex.scaling.x = 1.0f;
-                                            }
-                                            if (tex.scaling.y == 0.0f) {
-                                                tex.scaling.y = 1.0f;
-                                            }
-                                            if (tex.scaling.z == 0.0f) {
-                                                tex.scaling.z = 1.0f;
-                                            }
-                                        }
-#if defined(DEBUG_FBXREADER)
-                                        else {
-                                            QString propName = v;
-                                            unknown++;
-                                        }
-#endif
+                            propertyName = "P";
+                            index = 4;
+                            foreach(const FBXNode& property, subobject.children) {
+                                static const QVariant UV_SET = QByteArray("UVSet");
+                                static const QVariant CURRENT_TEXTURE_BLEND_MODE = QByteArray("CurrentTextureBlendMode");
+                                static const QVariant USE_MATERIAL = QByteArray("UseMaterial");
+                                static const QVariant TRANSLATION = QByteArray("Translation");
+                                static const QVariant ROTATION = QByteArray("Rotation");
+                                static const QVariant SCALING = QByteArray("Scaling");
+                                if (property.name == propertyName) {
+                                    QString v = property.properties.at(0).toString();
+                                    if (property.properties.at(0) == UV_SET) {
+                                        std::string uvName = property.properties.at(index).toString().toStdString();
+                                        tex.assign(tex.UVSet, property.properties.at(index).toString());
                                     }
+                                    else if (property.properties.at(0) == CURRENT_TEXTURE_BLEND_MODE) {
+                                        tex.assign<uint8_t>(tex.currentTextureBlendMode, property.properties.at(index).value<int>());
+                                    }
+                                    else if (property.properties.at(0) == USE_MATERIAL) {
+                                        tex.assign<bool>(tex.useMaterial, property.properties.at(index).value<int>());
+                                    }
+                                    else if (property.properties.at(0) == TRANSLATION) {
+                                        tex.assign(tex.translation, getVec3(property.properties, index));
+                                    }
+                                    else if (property.properties.at(0) == ROTATION) {
+                                        tex.assign(tex.rotation, getVec3(property.properties, index));
+                                    }
+                                    else if (property.properties.at(0) == SCALING) {
+                                        tex.assign(tex.scaling, getVec3(property.properties, index));
+                                        if (tex.scaling.x == 0.0f) {
+                                            tex.scaling.x = 1.0f;
+                                        }
+                                        if (tex.scaling.y == 0.0f) {
+                                            tex.scaling.y = 1.0f;
+                                        }
+                                        if (tex.scaling.z == 0.0f) {
+                                            tex.scaling.z = 1.0f;
+                                        }
+                                    }
+#if defined(DEBUG_FBXREADER)
+                                    else {
+                                        QString propName = v;
+                                        unknown++;
+                                    }
+#endif
                                 }
+                            }
                         }
 #if defined(DEBUG_FBXREADER)
                         else {
                             if (subobject.name == "Type") {
-                            } else if (subobject.name == "Version") {
-                            } else if (subobject.name == "FileName") {
-                            } else if (subobject.name == "Media") {
-                            } else {
+                            }
+                            else if (subobject.name == "Version") {
+                            }
+                            else if (subobject.name == "FileName") {
+                            }
+                            else if (subobject.name == "Media") {
+                            }
+                            else {
                                 QString subname = subobject.name.data();
                                 unknown++;
                             }
@@ -935,25 +1070,28 @@ FBXGeometry* FBXReader::extractFBXGeometry(const QVariantHash& mapping, const QS
                     if (!tex.isDefault) {
                         _textureParams.insert(getID(object.properties), tex);
                     }
-                } else if (object.name == "Video") {
+                }
+                else if (object.name == "Video") {
                     QByteArray filepath;
                     QByteArray content;
-                    foreach (const FBXNode& subobject, object.children) {
+                    foreach(const FBXNode& subobject, object.children) {
                         if (subobject.name == "RelativeFilename") {
-                            filepath= subobject.properties.at(0).toByteArray();
+                            filepath = subobject.properties.at(0).toByteArray();
                             filepath = filepath.replace('\\', '/');
 
-                        } else if (subobject.name == "Content" && !subobject.properties.isEmpty()) {
+                        }
+                        else if (subobject.name == "Content" && !subobject.properties.isEmpty()) {
                             content = subobject.properties.at(0).toByteArray();
                         }
                     }
                     if (!content.isEmpty()) {
                         _textureContent.insert(filepath, content);
                     }
-                } else if (object.name == "Material") {
+                }
+                else if (object.name == "Material") {
                     FBXMaterial material;
                     material.name = (object.properties.at(1).toString());
-                    foreach (const FBXNode& subobject, object.children) {
+                    foreach(const FBXNode& subobject, object.children) {
                         bool properties = false;
 
                         QByteArray propertyName;
@@ -963,11 +1101,13 @@ FBXGeometry* FBXReader::extractFBXGeometry(const QVariantHash& mapping, const QS
                             propertyName = "Property";
                             index = 3;
 
-                        } else if (subobject.name == "Properties70") {
+                        }
+                        else if (subobject.name == "Properties70") {
                             properties = true;
                             propertyName = "P";
                             index = 4;
-                        } else if (subobject.name == "ShadingModel") {
+                        }
+                        else if (subobject.name == "ShadingModel") {
                             material.shadingModel = subobject.properties.at(0).toString();
                         }
 
@@ -1004,38 +1144,49 @@ FBXGeometry* FBXReader::extractFBXGeometry(const QVariantHash& mapping, const QS
                                 if (property.name == propertyName) {
                                     if (property.properties.at(0) == DIFFUSE_COLOR) {
                                         material.diffuseColor = getVec3(property.properties, index);
-                                    } else if (property.properties.at(0) == DIFFUSE_FACTOR) {
+                                    }
+                                    else if (property.properties.at(0) == DIFFUSE_FACTOR) {
                                         material.diffuseFactor = property.properties.at(index).value<double>();
-                                    } else if (property.properties.at(0) == DIFFUSE) {
+                                    }
+                                    else if (property.properties.at(0) == DIFFUSE) {
                                         // NOTE: this is uneeded but keep it for now for debug
                                         //  material.diffuseColor = getVec3(property.properties, index);
                                         //  material.diffuseFactor = 1.0;
 
-                                    } else if (property.properties.at(0) == SPECULAR_COLOR) {
+                                    }
+                                    else if (property.properties.at(0) == SPECULAR_COLOR) {
                                         material.specularColor = getVec3(property.properties, index);
-                                    } else if (property.properties.at(0) == SPECULAR_FACTOR) {
+                                    }
+                                    else if (property.properties.at(0) == SPECULAR_FACTOR) {
                                         material.specularFactor = property.properties.at(index).value<double>();
-                                    } else if (property.properties.at(0) == SPECULAR) {
+                                    }
+                                    else if (property.properties.at(0) == SPECULAR) {
                                         // NOTE: this is uneeded but keep it for now for debug
                                         //  material.specularColor = getVec3(property.properties, index);
                                         //  material.specularFactor = 1.0;
 
-                                    } else if (property.properties.at(0) == EMISSIVE_COLOR) {
+                                    }
+                                    else if (property.properties.at(0) == EMISSIVE_COLOR) {
                                         material.emissiveColor = getVec3(property.properties, index);
-                                    } else if (property.properties.at(0) == EMISSIVE_FACTOR) {
+                                    }
+                                    else if (property.properties.at(0) == EMISSIVE_FACTOR) {
                                         material.emissiveFactor = property.properties.at(index).value<double>();
-                                    } else if (property.properties.at(0) == EMISSIVE) {
+                                    }
+                                    else if (property.properties.at(0) == EMISSIVE) {
                                         // NOTE: this is uneeded but keep it for now for debug
                                         //  material.emissiveColor = getVec3(property.properties, index);
                                         //  material.emissiveFactor = 1.0;
 
-                                    } else if (property.properties.at(0) == AMBIENT_FACTOR) {
+                                    }
+                                    else if (property.properties.at(0) == AMBIENT_FACTOR) {
                                         material.ambientFactor = property.properties.at(index).value<double>();
                                         // Detected just for BLender AO vs lightmap
-                                    } else if (property.properties.at(0) == SHININESS) {
+                                    }
+                                    else if (property.properties.at(0) == SHININESS) {
                                         material.shininess = property.properties.at(index).value<double>();
 
-                                    } else if (property.properties.at(0) == OPACITY) {
+                                    }
+                                    else if (property.properties.at(0) == OPACITY) {
                                         material.opacity = property.properties.at(index).value<double>();
                                     }
 
@@ -1044,47 +1195,58 @@ FBXGeometry* FBXReader::extractFBXGeometry(const QVariantHash& mapping, const QS
                                         material.isPBSMaterial = true;
                                         material.useNormalMap = (bool)property.properties.at(index).value<double>();
 
-                                    } else if (property.properties.at(0) == MAYA_BASE_COLOR) {
+                                    }
+                                    else if (property.properties.at(0) == MAYA_BASE_COLOR) {
                                         material.isPBSMaterial = true;
                                         material.diffuseColor = getVec3(property.properties, index);
 
-                                    } else if (property.properties.at(0) == MAYA_USE_COLOR_MAP) {
+                                    }
+                                    else if (property.properties.at(0) == MAYA_USE_COLOR_MAP) {
                                         material.isPBSMaterial = true;
-                                        material.useAlbedoMap = (bool) property.properties.at(index).value<double>();
+                                        material.useAlbedoMap = (bool)property.properties.at(index).value<double>();
 
-                                    } else if (property.properties.at(0) == MAYA_ROUGHNESS) {
+                                    }
+                                    else if (property.properties.at(0) == MAYA_ROUGHNESS) {
                                         material.isPBSMaterial = true;
                                         material.roughness = property.properties.at(index).value<double>();
 
-                                    } else if (property.properties.at(0) == MAYA_USE_ROUGHNESS_MAP) {
+                                    }
+                                    else if (property.properties.at(0) == MAYA_USE_ROUGHNESS_MAP) {
                                         material.isPBSMaterial = true;
                                         material.useRoughnessMap = (bool)property.properties.at(index).value<double>();
 
-                                    } else if (property.properties.at(0) == MAYA_METALLIC) {
+                                    }
+                                    else if (property.properties.at(0) == MAYA_METALLIC) {
                                         material.isPBSMaterial = true;
                                         material.metallic = property.properties.at(index).value<double>();
 
-                                    } else if (property.properties.at(0) == MAYA_USE_METALLIC_MAP) {
+                                    }
+                                    else if (property.properties.at(0) == MAYA_USE_METALLIC_MAP) {
                                         material.isPBSMaterial = true;
                                         material.useMetallicMap = (bool)property.properties.at(index).value<double>();
 
-                                    } else if (property.properties.at(0) == MAYA_EMISSIVE) {
+                                    }
+                                    else if (property.properties.at(0) == MAYA_EMISSIVE) {
                                         material.isPBSMaterial = true;
                                         material.emissiveColor = getVec3(property.properties, index);
 
-                                    } else if (property.properties.at(0) == MAYA_EMISSIVE_INTENSITY) {
+                                    }
+                                    else if (property.properties.at(0) == MAYA_EMISSIVE_INTENSITY) {
                                         material.isPBSMaterial = true;
                                         material.emissiveIntensity = property.properties.at(index).value<double>();
 
-                                    } else if (property.properties.at(0) == MAYA_USE_EMISSIVE_MAP) {
+                                    }
+                                    else if (property.properties.at(0) == MAYA_USE_EMISSIVE_MAP) {
                                         material.isPBSMaterial = true;
                                         material.useEmissiveMap = (bool)property.properties.at(index).value<double>();
 
-                                    } else if (property.properties.at(0) == MAYA_USE_AO_MAP) {
+                                    }
+                                    else if (property.properties.at(0) == MAYA_USE_AO_MAP) {
                                         material.isPBSMaterial = true;
                                         material.useOcclusionMap = (bool)property.properties.at(index).value<double>();
 
-                                    } else {
+                                    }
+                                    else {
                                         const QString propname = property.properties.at(0).toString();
                                         unknowns.push_back(propname.toStdString());
                                     }
@@ -1095,9 +1257,10 @@ FBXGeometry* FBXReader::extractFBXGeometry(const QVariantHash& mapping, const QS
                         else {
                             QString propname = subobject.name.data();
                             int unknown = 0;
-                            if ( (propname == "Version")
-                                ||(propname == "Multilayer")) {
-                            } else {
+                            if ((propname == "Version")
+                                || (propname == "Multilayer")) {
+                            }
+                            else {
                                 unknown++;
                             }
                         }
@@ -1107,7 +1270,8 @@ FBXGeometry* FBXReader::extractFBXGeometry(const QVariantHash& mapping, const QS
                     _fbxMaterials.insert(material.materialID, material);
 
 
-                } else if (object.name == "NodeAttribute") {
+                }
+                else if (object.name == "NodeAttribute") {
 #if defined(DEBUG_FBXREADER)
                     std::vector<QString> properties;
                     foreach(const QVariant& v, object.properties) {
@@ -1116,7 +1280,7 @@ FBXGeometry* FBXReader::extractFBXGeometry(const QVariantHash& mapping, const QS
 #endif
                     QString attribID = getID(object.properties);
                     QString attributetype;
-                    foreach (const FBXNode& subobject, object.children) {
+                    foreach(const FBXNode& subobject, object.children) {
                         if (subobject.name == "TypeFlags") {
                             typeFlags.insert(getID(object.properties), subobject.properties.at(0).toString());
                             attributetype = subobject.properties.at(0).toString();
@@ -1130,24 +1294,28 @@ FBXGeometry* FBXReader::extractFBXGeometry(const QVariantHash& mapping, const QS
                         }
                     }
 
-                } else if (object.name == "Deformer") {
+                }
+                else if (object.name == "Deformer") {
                     if (object.properties.last() == "Cluster") {
                         Cluster cluster;
-                        foreach (const FBXNode& subobject, object.children) {
+                        foreach(const FBXNode& subobject, object.children) {
                             if (subobject.name == "Indexes") {
                                 cluster.indices = getIntVector(subobject);
 
-                            } else if (subobject.name == "Weights") {
+                            }
+                            else if (subobject.name == "Weights") {
                                 cluster.weights = getDoubleVector(subobject);
 
-                            } else if (subobject.name == "TransformLink") {
+                            }
+                            else if (subobject.name == "TransformLink") {
                                 QVector<double> values = getDoubleVector(subobject);
                                 cluster.transformLink = createMat4(values);
                             }
                         }
                         clusters.insert(getID(object.properties), cluster);
 
-                    } else if (object.properties.last() == "BlendShapeChannel") {
+                    }
+                    else if (object.properties.last() == "BlendShapeChannel") {
                         QByteArray name = object.properties.at(1).toByteArray();
 
                         name = name.left(name.indexOf('\0'));
@@ -1157,13 +1325,14 @@ FBXGeometry* FBXReader::extractFBXGeometry(const QVariantHash& mapping, const QS
                         }
                         QString id = getID(object.properties);
                         geometry.blendshapeChannelNames << name;
-                        foreach (const WeightedIndex& index, blendshapeIndices.values(name)) {
+                        foreach(const WeightedIndex& index, blendshapeIndices.values(name)) {
                             blendshapeChannelIndices.insert(id, index);
                         }
                     }
-                } else if (object.name == "AnimationCurve") {
+                }
+                else if (object.name == "AnimationCurve") {
                     AnimationCurve curve;
-                    foreach (const FBXNode& subobject, object.children) {
+                    foreach(const FBXNode& subobject, object.children) {
                         if (subobject.name == "KeyValueFloat") {
                             curve.values = getFloatVector(subobject);
                         }
@@ -1172,22 +1341,24 @@ FBXGeometry* FBXReader::extractFBXGeometry(const QVariantHash& mapping, const QS
 
                 }
 #if defined(DEBUG_FBXREADER)
-                 else {
+                else {
                     QString objectname = object.name.data();
-                    if ( objectname == "Pose"
+                    if (objectname == "Pose"
                         || objectname == "AnimationStack"
                         || objectname == "AnimationLayer"
                         || objectname == "AnimationCurveNode") {
-                    } else {
+                    }
+                    else {
                         unknown++;
                     }
                 }
 #endif
             }
-        } else if (child.name == "Connections") {
+        }
+        else if (child.name == "Connections") {
             static const QVariant OO = QByteArray("OO");
             static const QVariant OP = QByteArray("OP");
-            foreach (const FBXNode& connection, child.children) {
+            foreach(const FBXNode& connection, child.children) {
                 if (connection.name == "C" || connection.name == "Connect") {
                     if (connection.properties.at(0) == OO) {
                         QString childID = getID(connection.properties, 1);
@@ -1203,56 +1374,79 @@ FBXGeometry* FBXReader::extractFBXGeometry(const QVariantHash& mapping, const QS
                                 _lightmapOffset = glm::clamp((*lightIt).second.color.x, 0.f, 1.f);
                             }
                         }
-                    } else if (connection.properties.at(0) == OP) {
+                    }
+                    else if (connection.properties.at(0) == OP) {
                         int counter = 0;
                         QByteArray type = connection.properties.at(3).toByteArray().toLower();
                         if (type.contains("DiffuseFactor")) {
                             diffuseFactorTextures.insert(getID(connection.properties, 2), getID(connection.properties, 1));
-                        } else if ((type.contains("diffuse") && !type.contains("tex_global_diffuse"))) {
+                        }
+                        else if ((type.contains("diffuse") && !type.contains("tex_global_diffuse"))) {
                             diffuseTextures.insert(getID(connection.properties, 2), getID(connection.properties, 1));
-                        } else if (type.contains("tex_color_map")) {
+                        }
+                        else if (type.contains("tex_color_map")) {
                             diffuseTextures.insert(getID(connection.properties, 2), getID(connection.properties, 1));
-                        } else if (type.contains("transparentcolor")) { // Maya way of passing TransparentMap
+                        }
+                        else if (type.contains("transparentcolor")) { // Maya way of passing TransparentMap
                             transparentTextures.insert(getID(connection.properties, 2), getID(connection.properties, 1));
-                        } else if (type.contains("transparencyfactor")) { // Blender way of passing TransparentMap
+                        }
+                        else if (type.contains("transparencyfactor")) { // Blender way of passing TransparentMap
                             transparentTextures.insert(getID(connection.properties, 2), getID(connection.properties, 1));
-                        } else if (type.contains("bump")) {
+                        }
+                        else if (type.contains("bump")) {
                             bumpTextures.insert(getID(connection.properties, 2), getID(connection.properties, 1));
-                        } else if (type.contains("normal")) {
+                        }
+                        else if (type.contains("normal")) {
                             normalTextures.insert(getID(connection.properties, 2), getID(connection.properties, 1));
-                        } else if (type.contains("tex_normal_map")) {
+                        }
+                        else if (type.contains("tex_normal_map")) {
                             normalTextures.insert(getID(connection.properties, 2), getID(connection.properties, 1));
-                        } else if ((type.contains("specular") && !type.contains("tex_global_specular")) || type.contains("reflection")) {
+                        }
+                        else if ((type.contains("specular") && !type.contains("tex_global_specular")) || type.contains("reflection")) {
                             specularTextures.insert(getID(connection.properties, 2), getID(connection.properties, 1));
-                        } else if (type.contains("tex_metallic_map")) {
+                        }
+                        else if (type.contains("tex_metallic_map")) {
                             metallicTextures.insert(getID(connection.properties, 2), getID(connection.properties, 1));
-                        } else if (type.contains("shininess")) {
+                        }
+                        else if (type.contains("shininess")) {
                             shininessTextures.insert(getID(connection.properties, 2), getID(connection.properties, 1));
-                        } else if (type.contains("tex_roughness_map")) {
+                        }
+                        else if (type.contains("tex_roughness_map")) {
                             roughnessTextures.insert(getID(connection.properties, 2), getID(connection.properties, 1));
-                        } else if (type.contains("emissive")) {
+                        }
+                        else if (type.contains("emissive")) {
                             emissiveTextures.insert(getID(connection.properties, 2), getID(connection.properties, 1));
-                        } else if (type.contains("tex_emissive_map")) {
+                        }
+                        else if (type.contains("tex_emissive_map")) {
                             emissiveTextures.insert(getID(connection.properties, 2), getID(connection.properties, 1));
-                        } else if (type.contains("ambientcolor")) {
+                        }
+                        else if (type.contains("ambientcolor")) {
                             ambientTextures.insert(getID(connection.properties, 2), getID(connection.properties, 1));
-                        } else if (type.contains("ambientfactor")) {
+                        }
+                        else if (type.contains("ambientfactor")) {
                             ambientFactorTextures.insert(getID(connection.properties, 2), getID(connection.properties, 1));
-                        } else if (type.contains("tex_ao_map")) {
+                        }
+                        else if (type.contains("tex_ao_map")) {
                             occlusionTextures.insert(getID(connection.properties, 2), getID(connection.properties, 1));
-                        } else if (type == "lcl rotation") {
+                        }
+                        else if (type == "lcl rotation") {
                             localRotations.insert(getID(connection.properties, 2), getID(connection.properties, 1));
-                        } else if (type == "lcl translation") {
+                        }
+                        else if (type == "lcl translation") {
                             localTranslations.insert(getID(connection.properties, 2), getID(connection.properties, 1));
 
-                        } else if (type == "d|x") {
+                        }
+                        else if (type == "d|x") {
                             xComponents.insert(getID(connection.properties, 2), getID(connection.properties, 1));
-                        } else if (type == "d|y") {
+                        }
+                        else if (type == "d|y") {
                             yComponents.insert(getID(connection.properties, 2), getID(connection.properties, 1));
-                        } else if (type == "d|z") {
+                        }
+                        else if (type == "d|z") {
                             zComponents.insert(getID(connection.properties, 2), getID(connection.properties, 1));
 
-                        } else {
+                        }
+                        else {
                             QString typenam = type.data();
                             counter++;
                         }
@@ -1265,7 +1459,7 @@ FBXGeometry* FBXReader::extractFBXGeometry(const QVariantHash& mapping, const QS
 #if defined(DEBUG_FBXREADER)
         else {
             QString objectname = child.name.data();
-            if ( objectname == "Pose"
+            if (objectname == "Pose"
                 || objectname == "CreationTime"
                 || objectname == "FileId"
                 || objectname == "Creator"
@@ -1276,7 +1470,8 @@ FBXGeometry* FBXReader::extractFBXGeometry(const QVariantHash& mapping, const QS
                 || objectname == "AnimationStack"
                 || objectname == "AnimationLayer"
                 || objectname == "AnimationCurveNode") {
-            } else {
+            }
+            else {
                 unknown++;
             }
         }
@@ -1292,7 +1487,7 @@ FBXGeometry* FBXReader::extractFBXGeometry(const QVariantHash& mapping, const QS
     }
 
     // assign the blendshapes to their corresponding meshes
-    foreach (const ExtractedBlendshape& extracted, blendshapes) {
+    foreach(const ExtractedBlendshape& extracted, blendshapes) {
         QString blendshapeChannelID = _connectionParentMap.value(extracted.id);
         QString blendshapeID = _connectionParentMap.value(blendshapeChannelID);
         QString meshID = _connectionParentMap.value(blendshapeID);
@@ -1302,18 +1497,18 @@ FBXGeometry* FBXReader::extractFBXGeometry(const QVariantHash& mapping, const QS
     // get offset transform from mapping
     float offsetScale = mapping.value("scale", 1.0f).toFloat() * unitScaleFactor * METERS_PER_CENTIMETER;
     glm::quat offsetRotation = glm::quat(glm::radians(glm::vec3(mapping.value("rx").toFloat(),
-            mapping.value("ry").toFloat(), mapping.value("rz").toFloat())));
+        mapping.value("ry").toFloat(), mapping.value("rz").toFloat())));
     geometry.offset = glm::translate(glm::vec3(mapping.value("tx").toFloat(), mapping.value("ty").toFloat(),
         mapping.value("tz").toFloat())) * glm::mat4_cast(offsetRotation) *
-            glm::scale(glm::vec3(offsetScale, offsetScale, offsetScale));
+        glm::scale(glm::vec3(offsetScale, offsetScale, offsetScale));
 
     // get the list of models in depth-first traversal order
     QVector<QString> modelIDs;
     QSet<QString> remainingModels;
     for (QHash<QString, FBXModel>::const_iterator model = models.constBegin(); model != models.constEnd(); model++) {
         // models with clusters must be parented to the cluster top
-        foreach (const QString& deformerID, _connectionChildMap.values(model.key())) {
-            foreach (const QString& clusterID, _connectionChildMap.values(deformerID)) {
+        foreach(const QString& deformerID, _connectionChildMap.values(model.key())) {
+            foreach(const QString& clusterID, _connectionChildMap.values(deformerID)) {
                 if (!clusters.contains(clusterID)) {
                     continue;
                 }
@@ -1323,7 +1518,7 @@ FBXGeometry* FBXReader::extractFBXGeometry(const QVariantHash& mapping, const QS
                 goto outerBreak;
             }
         }
-        outerBreak:
+    outerBreak:
 
         // make sure the parent is in the child map
         QString parent = _connectionParentMap.value(model.key());
@@ -1334,7 +1529,7 @@ FBXGeometry* FBXReader::extractFBXGeometry(const QVariantHash& mapping, const QS
     }
     while (!remainingModels.isEmpty()) {
         QString first = *remainingModels.constBegin();
-        foreach (const QString& id, remainingModels) {
+        foreach(const QString& id, remainingModels) {
             if (id < first) {
                 first = id;
             }
@@ -1345,7 +1540,7 @@ FBXGeometry* FBXReader::extractFBXGeometry(const QVariantHash& mapping, const QS
 
     // figure the number of animation frames from the curves
     int frameCount = 1;
-    foreach (const AnimationCurve& curve, animationCurves) {
+    foreach(const AnimationCurve& curve, animationCurves) {
         frameCount = qMax(frameCount, curve.values.size());
     }
     for (int i = 0; i < frameCount; i++) {
@@ -1358,7 +1553,7 @@ FBXGeometry* FBXReader::extractFBXGeometry(const QVariantHash& mapping, const QS
     // convert the models to joints
     QVariantList freeJoints = mapping.values("freeJoint");
     geometry.hasSkeletonJoints = false;
-    foreach (const QString& modelID, modelIDs) {
+    foreach(const QString& modelID, modelIDs) {
         const FBXModel& model = models[modelID];
         FBXJoint joint;
         joint.isFree = freeJoints.contains(model.name);
@@ -1395,9 +1590,10 @@ FBXGeometry* FBXReader::extractFBXGeometry(const QVariantHash& mapping, const QS
             joint.transform = geometry.offset * glm::translate(joint.translation) * joint.preTransform *
                 glm::mat4_cast(combinedRotation) * joint.postTransform;
             joint.inverseDefaultRotation = glm::inverse(combinedRotation);
-           joint.distanceToParent = 0.0f;
+            joint.distanceToParent = 0.0f;
 
-        } else {
+        }
+        else {
             const FBXJoint& parentJoint = geometry.joints.at(joint.parentIndex);
             joint.transform = parentJoint.transform * glm::translate(joint.translation) *
                 joint.preTransform * glm::mat4_cast(combinedRotation) * joint.postTransform;
@@ -1408,7 +1604,7 @@ FBXGeometry* FBXReader::extractFBXGeometry(const QVariantHash& mapping, const QS
         joint.inverseBindRotation = joint.inverseDefaultRotation;
         joint.name = model.name;
 
-        foreach (const QString& childID, _connectionChildMap.values(modelID)) {
+        foreach(const QString& childID, _connectionChildMap.values(modelID)) {
             QString type = typeFlags.value(childID);
             if (!type.isEmpty()) {
                 geometry.hasSkeletonJoints |= (joint.isSkeletonJoint = type.toLower().contains("Skeleton"));
@@ -1462,7 +1658,7 @@ FBXGeometry* FBXReader::extractFBXGeometry(const QVariantHash& mapping, const QS
     geometry.leftToeJointIndex = modelIDs.indexOf(jointLeftToeID);
     geometry.rightToeJointIndex = modelIDs.indexOf(jointRightToeID);
 
-    foreach (const QString& id, humanIKJointIDs) {
+    foreach(const QString& id, humanIKJointIDs) {
         geometry.humanIKJointIndices.append(modelIDs.indexOf(id));
     }
 
@@ -1524,7 +1720,7 @@ FBXGeometry* FBXReader::extractFBXGeometry(const QVariantHash& mapping, const QS
         glm::mat4 modelTransform = getGlobalTransform(_connectionParentMap, models, modelID, geometry.applicationName == "mixamo.com", url);
 
         // compute the mesh extents from the transformed vertices
-        foreach (const glm::vec3& vertex, extracted.mesh.vertices) {
+        foreach(const glm::vec3& vertex, extracted.mesh.vertices) {
             glm::vec3 transformedVertex = glm::vec3(modelTransform * glm::vec4(vertex, 1.0f));
             geometry.meshExtents.minimum = glm::min(geometry.meshExtents.minimum, transformedVertex);
             geometry.meshExtents.maximum = glm::max(geometry.meshExtents.maximum, transformedVertex);
@@ -1557,7 +1753,8 @@ FBXGeometry* FBXReader::extractFBXGeometry(const QVariantHash& mapping, const QS
 
                 materialIndex++;
 
-            } else if (_textureFilenames.contains(childID)) {
+            }
+            else if (_textureFilenames.contains(childID)) {
                 FBXTexture texture = getTexture(childID);
                 for (int j = 0; j < extracted.partMaterialTextures.size(); j++) {
                     int partTexture = extracted.partMaterialTextures.at(j).second;
@@ -1574,7 +1771,7 @@ FBXGeometry* FBXReader::extractFBXGeometry(const QVariantHash& mapping, const QS
         // if we have a normal map (and texture coordinates), we must compute tangents
         if (generateTangents && !extracted.mesh.texCoords.isEmpty()) {
             extracted.mesh.tangents.resize(extracted.mesh.vertices.size());
-            foreach (const FBXMeshPart& part, extracted.mesh.parts) {
+            foreach(const FBXMeshPart& part, extracted.mesh.parts) {
                 for (int i = 0; i < part.quadIndices.size(); i += 4) {
                     setTangents(extracted.mesh, part.quadIndices.at(i), part.quadIndices.at(i + 1));
                     setTangents(extracted.mesh, part.quadIndices.at(i + 1), part.quadIndices.at(i + 2));
@@ -1588,7 +1785,7 @@ FBXGeometry* FBXReader::extractFBXGeometry(const QVariantHash& mapping, const QS
                     setTangents(extracted.mesh, part.triangleIndices.at(i + 1), part.triangleIndices.at(i + 2));
                     setTangents(extracted.mesh, part.triangleIndices.at(i + 2), part.triangleIndices.at(i));
                 }
-                if ((part.triangleIndices.size() % 3) != 0){
+                if ((part.triangleIndices.size() % 3) != 0) {
                     qCDebug(modelformat) << "Error in extractFBXGeometry part.triangleIndices.size() is not divisible by three ";
                 }
             }
@@ -1596,8 +1793,8 @@ FBXGeometry* FBXReader::extractFBXGeometry(const QVariantHash& mapping, const QS
 
         // find the clusters with which the mesh is associated
         QVector<QString> clusterIDs;
-        foreach (const QString& childID, _connectionChildMap.values(it.key())) {
-            foreach (const QString& clusterID, _connectionChildMap.values(childID)) {
+        foreach(const QString& childID, _connectionChildMap.values(it.key())) {
+            foreach(const QString& clusterID, _connectionChildMap.values(childID)) {
                 if (!clusters.contains(clusterID)) {
                     continue;
                 }
@@ -1678,7 +1875,7 @@ FBXGeometry* FBXReader::extractFBXGeometry(const QVariantHash& mapping, const QS
                     int oldIndex = cluster.indices.at(j);
                     float weight = cluster.weights.at(j);
                     for (QMultiHash<int, int>::const_iterator it = extracted.newIndices.constFind(oldIndex);
-                            it != extracted.newIndices.end() && it.key() == oldIndex; it++) {
+                        it != extracted.newIndices.end() && it.key() == oldIndex; it++) {
                         int newIndex = it.value();
 
                         // remember vertices with at least 1/4 weight
@@ -1734,7 +1931,8 @@ FBXGeometry* FBXReader::extractFBXGeometry(const QVariantHash& mapping, const QS
                     }
                 }
             }
-        } else {
+        }
+        else {
             // this is a single-mesh joint
             int jointIndex = firstFBXCluster.jointIndex;
             FBXJoint& joint = geometry.joints[jointIndex];
@@ -1743,7 +1941,7 @@ FBXGeometry* FBXReader::extractFBXGeometry(const QVariantHash& mapping, const QS
             float clusterScale = extractUniformScale(firstFBXCluster.inverseBindMatrix);
             glm::mat4 meshToJoint = glm::inverse(joint.bindTransform) * modelTransform;
             ShapeVertices& points = shapeVertices.at(jointIndex);
-            foreach (const glm::vec3& vertex, extracted.mesh.vertices) {
+            foreach(const glm::vec3& vertex, extracted.mesh.vertices) {
                 const glm::mat4 vertexTransform = meshToJoint * glm::translate(vertex);
                 points.push_back(extractTranslation(vertexTransform) * clusterScale);
             }
@@ -1811,7 +2009,7 @@ FBXGeometry* FBXReader::extractFBXGeometry(const QVariantHash& mapping, const QS
 
     // attempt to map any meshes to a named model
     for (QHash<QString, int>::const_iterator m = meshIDsToMeshIndices.constBegin();
-            m != meshIDsToMeshIndices.constEnd(); m++) {
+        m != meshIDsToMeshIndices.constEnd(); m++) {
 
         const QString& meshID = m.key();
         int meshIndex = m.value();
@@ -1824,6 +2022,7 @@ FBXGeometry* FBXReader::extractFBXGeometry(const QVariantHash& mapping, const QS
             }
         }
     }
+
 
     return geometryPtr;
 }

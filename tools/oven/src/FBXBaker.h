@@ -72,6 +72,7 @@ private:
     void checkIfTexturesFinished();
 
     void compressMesh();
+    void Test();
 
     QString createBakedTextureFileName(const QFileInfo& textureFileInfo);
     QUrl getTextureURL(const QFileInfo& textureFileInfo, fbxsdk::FbxFileTexture* fileTexture);

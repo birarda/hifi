@@ -364,3 +364,8 @@ endif ()
 add_dependency_external_projects(GifCreator)
 find_package(GifCreator REQUIRED)
 target_include_directories(${TARGET_NAME} PUBLIC ${GIFCREATOR_INCLUDE_DIRS})
+
+add_dependency_external_projects(draco)
+find_package(Draco REQUIRED)
+target_include_directories(${TARGET_NAME} SYSTEM PRIVATE ${DRACO_INCLUDE_DIRS})
+target_link_libraries(${TARGET_NAME} ${DRACO_LIBRARY} ${DRACO_ENCODER_LIBRARY})
