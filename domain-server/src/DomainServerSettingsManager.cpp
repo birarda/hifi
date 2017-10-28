@@ -310,6 +310,17 @@ void DomainServerSettingsManager::setupConfigMap(const QStringList& argumentList
             _standardAgentPermissions[NodePermissions::standardNameLocalhost]->set(NodePermissions::Permission::canRezTemporaryCertifiedEntities);
             packPermissions();
         }
+
+        if (oldVersion < 2.0) {
+            // this was prior to having the wizard, set it as completed so that existing users don't have to do the wizard
+            static const QString WIZARD_COMPLETED_KEY_PATH = "wizard.completed_once";
+
+            QVariant* wizardCompleted = _configMap.valueForKeyPath(WIZARD_COMPLETED_KEY_PATH, true);
+            wizardCompleted->setValue(true);
+
+            // persist the new config
+            persistToFile();
+        }
     }
 
     unpackPermissions();
