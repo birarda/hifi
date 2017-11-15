@@ -202,6 +202,27 @@ void NodeList::timePingReply(ReceivedMessage& message, const SharedNodePointer& 
 
 void NodeList::processPingPacket(QSharedPointer<ReceivedMessage> message, SharedNodePointer sendingNode) {
 
+    if (sendingNode->getType() == NodeType::EntityServer) {
+        // delay ping replies to the entity server by 2 seconds
+        QTimer::singleShot(2000, this, [=]() {
+            // send back a reply
+            auto replyPacket = constructPingReplyPacket(*message);
+            const HifiSockAddr& senderSockAddr = message->getSenderSockAddr();
+            sendPacket(std::move(replyPacket), *sendingNode, senderSockAddr);
+
+            // If we don't have a symmetric socket for this node and this socket doesn't match
+            // what we have for public and local then set it as the symmetric.
+            // This allows a server on a reachable port to communicate with nodes on symmetric NATs
+            if (sendingNode->getSymmetricSocket().isNull()) {
+                if (senderSockAddr != sendingNode->getLocalSocket() && senderSockAddr != sendingNode->getPublicSocket()) {
+                    sendingNode->setSymmetricSocket(senderSockAddr);
+                }
+            }
+        });
+
+        return;
+    }
+
     // send back a reply
     auto replyPacket = constructPingReplyPacket(*message);
     const HifiSockAddr& senderSockAddr = message->getSenderSockAddr();
