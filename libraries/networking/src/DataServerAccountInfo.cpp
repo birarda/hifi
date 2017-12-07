@@ -31,9 +31,6 @@ const QString DataServerAccountInfo::EMPTY_KEY = QString();
 DataServerAccountInfo::DataServerAccountInfo(const DataServerAccountInfo& otherInfo) : QObject() {
     _accessToken = otherInfo._accessToken;
     _username = otherInfo._username;
-    _xmppPassword = otherInfo._xmppPassword;
-    _discourseApiKey = otherInfo._discourseApiKey;
-    _walletID = otherInfo._walletID;
     _privateKey = otherInfo._privateKey;
     _domainID = otherInfo._domainID;
     _temporaryDomainID = otherInfo._temporaryDomainID;
@@ -51,9 +48,6 @@ void DataServerAccountInfo::swap(DataServerAccountInfo& otherInfo) {
 
     swap(_accessToken, otherInfo._accessToken);
     swap(_username, otherInfo._username);
-    swap(_xmppPassword, otherInfo._xmppPassword);
-    swap(_discourseApiKey, otherInfo._discourseApiKey);
-    swap(_walletID, otherInfo._walletID);
     swap(_privateKey, otherInfo._privateKey);
     swap(_domainID, otherInfo._domainID);
     swap(_temporaryDomainID, otherInfo._temporaryDomainID);
@@ -72,24 +66,6 @@ void DataServerAccountInfo::setUsername(const QString& username) {
     }
 }
 
-void DataServerAccountInfo::setXMPPPassword(const QString& xmppPassword) {
-     if (_xmppPassword != xmppPassword) {
-         _xmppPassword = xmppPassword;
-     }
-}
-
-void DataServerAccountInfo::setDiscourseApiKey(const QString& discourseApiKey) {
-    if (_discourseApiKey != discourseApiKey) {
-        _discourseApiKey = discourseApiKey;
-    }
-}
-
-void DataServerAccountInfo::setWalletID(const QUuid& walletID) {
-    if (_walletID != walletID) {
-        _walletID = walletID;
-    }
-}
-
 bool DataServerAccountInfo::hasProfile() const {
     return _username.length() > 0;
 }
@@ -97,9 +73,6 @@ bool DataServerAccountInfo::hasProfile() const {
 void DataServerAccountInfo::setProfileInfoFromJSON(const QJsonObject& jsonObject) {
     QJsonObject user = jsonObject["data"].toObject()["user"].toObject();
     setUsername(user["username"].toString());
-    setXMPPPassword(user["xmpp_password"].toString());
-    setDiscourseApiKey(user["discourse_api_key"].toString());
-    setWalletID(QUuid(user["wallet_id"].toString()));
 }
 
 QByteArray DataServerAccountInfo::getUsernameSignature(const QUuid& connectionToken) {
@@ -151,15 +124,13 @@ QByteArray DataServerAccountInfo::signPlaintext(const QByteArray& plaintext) {
 }
 
 QDataStream& operator<<(QDataStream &out, const DataServerAccountInfo& info) {
-    out << info._accessToken << info._username << info._xmppPassword << info._discourseApiKey
-        << info._walletID << info._privateKey << info._domainID
+    out << info._accessToken << info._username << info._privateKey << info._domainID
         << info._temporaryDomainID << info._temporaryDomainApiKey;
     return out;
 }
 
 QDataStream& operator>>(QDataStream &in, DataServerAccountInfo& info) {
-    in >> info._accessToken >> info._username >> info._xmppPassword >> info._discourseApiKey
-        >> info._walletID >> info._privateKey >> info._domainID
+    in >> info._accessToken >> info._username >> info._privateKey >> info._domainID
         >> info._temporaryDomainID >> info._temporaryDomainApiKey;
     return in;
 }

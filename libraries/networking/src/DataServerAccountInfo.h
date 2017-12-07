@@ -18,8 +18,6 @@
 
 #include "OAuthAccessToken.h"
 
-const float SATOSHIS_PER_CREDIT = 100000000.0f;
-
 class DataServerAccountInfo : public QObject {
     Q_OBJECT
     const static QString EMPTY_KEY;
@@ -34,15 +32,6 @@ public:
 
     const QString& getUsername() const { return _username; }
     void setUsername(const QString& username);
-
-    const QString& getXMPPPassword() const { return _xmppPassword; }
-    void setXMPPPassword(const QString& xmppPassword);
-
-    const QString& getDiscourseApiKey() const { return _discourseApiKey; }
-    void setDiscourseApiKey(const QString& discourseApiKey);
-    
-    const QUuid& getWalletID() const { return _walletID; }
-    void setWalletID(const QUuid& walletID);
 
     QByteArray getUsernameSignature(const QUuid& connectionToken);
     bool hasPrivateKey() const { return !_privateKey.isEmpty(); }
@@ -68,9 +57,6 @@ private:
 
     OAuthAccessToken _accessToken;
     QString _username;
-    QString _xmppPassword;
-    QString _discourseApiKey;
-    QUuid _walletID;
     QUuid _domainID;
     QUuid _temporaryDomainID;
     QString _temporaryDomainApiKey;
