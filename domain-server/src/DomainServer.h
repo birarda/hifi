@@ -29,12 +29,10 @@
 #include "DomainMetadata.h"
 #include "DomainServerSettingsManager.h"
 #include "DomainServerWebSessionData.h"
-#include "WalletTransaction.h"
 
 #include "PendingAssignedNodeData.h"
 
 typedef QSharedPointer<Assignment> SharedAssignmentPointer;
-typedef QMultiHash<QUuid, WalletTransaction*> TransactionHash;
 
 using Subnet = QPair<QHostAddress, int>;
 using SubnetList = std::vector<Subnet>;
@@ -69,8 +67,6 @@ public slots:
     /// Called by NodeList to inform us a node has been killed
     void nodeKilled(SharedNodePointer node);
 
-    void transactionJSONCallback(const QJsonObject& data);
-
     void restart();
 
 private slots:
@@ -81,9 +77,6 @@ private slots:
     void processNodeDisconnectRequestPacket(QSharedPointer<ReceivedMessage> message);
     void processICEServerHeartbeatDenialPacket(QSharedPointer<ReceivedMessage> message);
     void processICEServerHeartbeatACK(QSharedPointer<ReceivedMessage> message);
-
-    void setupPendingAssignmentCredits();
-    void sendPendingTransactionsToServer();
 
     void performIPAddressUpdate(const HifiSockAddr& newPublicSockAddr);
     void sendHeartbeatToMetaverse() { sendHeartbeatToMetaverse(QString()); }
@@ -203,7 +196,6 @@ private:
 
     QHash<QUuid, SharedAssignmentPointer> _allAssignments;
     QQueue<SharedAssignmentPointer> _unfulfilledAssignments;
-    TransactionHash _pendingAssignmentCredits;
 
     bool _isUsingDTLS;
 

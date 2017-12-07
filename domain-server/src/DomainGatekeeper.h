@@ -35,8 +35,7 @@ class DomainGatekeeper : public QObject {
 public:
     DomainGatekeeper(DomainServer* server);
     
-    void addPendingAssignedNode(const QUuid& nodeUUID, const QUuid& assignmentUUID,
-                                const QUuid& walletUUID, const QString& nodeVersion);
+    void addPendingAssignedNode(const QUuid& nodeUUID, const QUuid& assignmentUUID, const QString& nodeVersion);
     QUuid assignmentUUIDForPendingAssignment(const QUuid& tempUUID);
     
     void removeICEPeer(const QUuid& peerUUID) { _icePeers.remove(peerUUID); }
