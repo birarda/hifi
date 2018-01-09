@@ -139,7 +139,13 @@ qint64 Socket::writePacket(const Packet& packet, const HifiSockAddr& sockAddr) {
     // write the correct sequence number to the Packet here
     packet.writeSequenceNumber(sequenceNumber);
 
-    return writeDatagram(packet.getData(), packet.getDataSize(), sockAddr);
+    auto bytesWritten = writeDatagram(packet.getData(), packet.getDataSize(), sockAddr);
+    if (bytesWritten < 0) {
+        qCDebug(networking) << "Failed to write datagram with sequence number" << (uint32_t) packet.getSequenceNumber()
+            << "to" << sockAddr;
+    }
+
+    return bytesWritten;
 }
 
 qint64 Socket::writePacket(std::unique_ptr<Packet> packet, const HifiSockAddr& sockAddr) {
@@ -230,6 +236,9 @@ qint64 Socket::writeDatagram(const char* data, qint64 size, const HifiSockAddr& 
 }
 
 qint64 Socket::writeDatagram(const QByteArray& datagram, const HifiSockAddr& sockAddr) {
+    static std::mutex socketMutex;
+
+    std::lock_guard<std::mutex> lock(socketMutex);
 
     qint64 bytesWritten = _udpSocket.writeDatagram(datagram, sockAddr.getAddress(), sockAddr.getPort());
 
