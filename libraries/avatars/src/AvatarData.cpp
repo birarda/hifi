@@ -512,9 +512,13 @@ QByteArray AvatarData::toByteArray(AvatarDataDetail dataDetail, quint64 lastSent
 
         destinationBuffer += numValidityBytes; // Move pointer past the validity bytes
 
+        // sentJointDataOut and lastSentJointData might be the same vector
+        // build sentJointDataOut locally and then swap it at the end.
+        QVector<JointData> localSentJointDataOut;
         if (sentJointDataOut) {
-            sentJointDataOut->resize(_jointData.size()); // Make sure the destination is resized before using it
+            localSentJointDataOut.resize(numJoints); // Make sure the destination is resized before using it
         }
+
         float minRotationDOT = !distanceAdjust ? AVATAR_MIN_ROTATION_DOT : getDistanceBasedMinRotationDOT(viewerPosition);
 
         for (int i = 0; i < _jointData.size(); i++) {
@@ -534,8 +538,7 @@ QByteArray AvatarData::toByteArray(AvatarDataDetail dataDetail, quint64 lastSent
                         destinationBuffer += packOrientationQuatToSixBytes(destinationBuffer, data.rotation);
 
                         if (sentJointDataOut) {
-                            auto jointDataOut = *sentJointDataOut;
-                            jointDataOut[i].rotation = data.rotation;
+                            localSentJointDataOut[i].rotation = data.rotation;
                         }
 
                     }
@@ -584,8 +587,7 @@ QByteArray AvatarData::toByteArray(AvatarDataDetail dataDetail, quint64 lastSent
                             packFloatVec3ToSignedTwoByteFixed(destinationBuffer, data.translation, TRANSLATION_COMPRESSION_RADIX);
 
                         if (sentJointDataOut) {
-                            auto jointDataOut = *sentJointDataOut;
-                            jointDataOut[i].translation = data.translation;
+                            localSentJointDataOut[i].translation = data.translation;
                         }
 
                     }
@@ -627,6 +629,11 @@ QByteArray AvatarData::toByteArray(AvatarDataDetail dataDetail, quint64 lastSent
         int numBytes = destinationBuffer - startSection;
         if (outboundDataRateOut) {
             outboundDataRateOut->jointDataRate.increment(numBytes);
+        }
+
+        if (sentJointDataOut) {
+            // Push new sent joint data to sentJointDataOut
+            sentJointDataOut->swap(localSentJointDataOut);
         }
     }
 
