@@ -236,11 +236,20 @@ qint64 Socket::writeDatagram(const char* data, qint64 size, const HifiSockAddr& 
 }
 
 qint64 Socket::writeDatagram(const QByteArray& datagram, const HifiSockAddr& sockAddr) {
-    static std::mutex socketMutex;
 
-    std::lock_guard<std::mutex> lock(socketMutex);
+    auto socketDescriptor = _udpSocket.socketDescriptor();
+    struct sockaddr_in receiver;
+    receiver.sin_family = AF_INET;
 
-    qint64 bytesWritten = _udpSocket.writeDatagram(datagram, sockAddr.getAddress(), sockAddr.getPort());
+    uint32_t hostAddress = sockAddr.getAddress().toIPv4Address();
+    receiver.sin_addr.s_addr = htonl(hostAddress);
+
+    uint16_t hostPort = sockAddr.getPort();
+    receiver.sin_port = htons(hostPort);
+
+    qint64 bytesWritten = sendto(socketDescriptor, datagram, datagram.size(), 0, (struct sockaddr*) &receiver, sizeof(receiver));
+
+//    qint64 bytesWritten = _udpSocket.writeDatagram(datagram, sockAddr.getAddress(), sockAddr.getPort());
 
     if (bytesWritten < 0) {
         // when saturating a link this isn't an uncommon message - suppress it so it doesn't bomb the debug
@@ -248,7 +257,7 @@ qint64 Socket::writeDatagram(const QByteArray& datagram, const HifiSockAddr& soc
         static QString repeatedMessage
             = LogHandler::getInstance().addRepeatedMessageRegex(WRITE_ERROR_REGEX);
 
-        qCDebug(networking) << "Socket::writeDatagram" << _udpSocket.error();
+//        qCDebug(networking) << "Socket::writeDatagram" << _udpSocket.error();
 
         qCDebug(networking) << "Error sending packet of size" << datagram.size() << "to" << sockAddr;
     }
