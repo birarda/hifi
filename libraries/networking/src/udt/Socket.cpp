@@ -233,7 +233,7 @@ qint64 Socket::writeDatagram(const QByteArray& datagram, const HifiSockAddr& soc
         static QString repeatedMessage
             = LogHandler::getInstance().addRepeatedMessageRegex(WRITE_ERROR_REGEX);
 
-        qCDebug(networking) << "Socket::writeDatagram" << _udpSocket.error() << "-" << qPrintable(_udpSocket.errorString());
+        qCDebug(networking) << "Socket::writeDatagram" << _udpSocket.error();
     }
 
     return bytesWritten;
