@@ -188,7 +188,13 @@ qint64 Socket::writePacketList(std::unique_ptr<PacketList> packetList, const Hif
     // Unerliable and Unordered
     qint64 totalBytesSent = 0;
     while (!packetList->_packets.empty()) {
-        totalBytesSent += writePacket(packetList->takeFront<Packet>(), sockAddr);
+        auto bytesWritten = writePacket(packetList->takeFront<Packet>(), sockAddr);
+
+        if (bytesWritten < 0) {
+            qCDebug(networking) << "Error while sending PacketList - packets:" << packetList->getNumPackets() << "data size:" << packetList->getDataSize();
+        }
+
+        totalBytesSent += bytesWritten;
     }
 
     return totalBytesSent;
@@ -234,6 +240,8 @@ qint64 Socket::writeDatagram(const QByteArray& datagram, const HifiSockAddr& soc
             = LogHandler::getInstance().addRepeatedMessageRegex(WRITE_ERROR_REGEX);
 
         qCDebug(networking) << "Socket::writeDatagram" << _udpSocket.error();
+
+        qCDebug(networking) << "Error sending packet of size" << datagram.size() << "to" << sockAddr;
     }
 
     return bytesWritten;
