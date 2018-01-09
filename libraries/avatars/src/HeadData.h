@@ -55,10 +55,17 @@ public:
     void setOrientation(const glm::quat& orientation);
 
     void setBlendshape(QString name, float val);
+
     const QVector<float>& getBlendshapeCoefficients() const { return _blendshapeCoefficients; }
-    const QVector<float>& getSummedBlendshapeCoefficients();
+
+    // getSummedBlendshapeCoefficients() and getNumSummedBlendshapeCoefficients()
+    // cannot be called concurrently with either of setBlendshapeCoefficients() or setBlendshapeCoefficientsFromBuffer()
+    QVector<float> getSummedBlendshapeCoefficients() const;
     int getNumSummedBlendshapeCoefficients() const;
-    void setBlendshapeCoefficients(const QVector<float>& blendshapeCoefficients) { _blendshapeCoefficients = blendshapeCoefficients; }
+
+    // the following two setters are not thread safe
+    void setBlendshapeCoefficients(QVector<float> blendshapeCoefficients);
+    void setBlendshapeCoefficientsFromBuffer(const float* sourceBuffer, int numCoefficients);
 
     const glm::vec3& getLookAtPosition() const { return _lookAtPosition; }
     void setLookAtPosition(const glm::vec3& lookAtPosition) {
@@ -67,12 +74,26 @@ public:
         }
         _lookAtPosition = lookAtPosition;
     }
-    bool lookAtPositionChangedSince(quint64 time) { return _lookAtPositionChanged >= time; }
-
-    friend class AvatarData;
+    bool lookAtPositionChangedSince(quint64 time) const { return _lookAtPositionChanged >= time; }
 
     QJsonObject toJson() const;
     void fromJson(const QJsonObject& json);
+
+    void setIsFaceTrackerConnected(bool isFaceTrackerConnected) { _isFaceTrackerConnected = isFaceTrackerConnected; }
+    bool getIsFaceTrackerConnected() const { return _isFaceTrackerConnected; }
+
+    void setIsEyeTrackerConnected(bool isEyeTrackerConnected) { _isEyeTrackerConnected = isEyeTrackerConnected; }
+    bool getIsEyeTrackerConnected() const { return _isEyeTrackerConnected; }
+
+    float getLeftEyeBlink() const { return _leftEyeBlink; }
+    float getRightEyeBlink() const { return _rightEyeBlink; }
+    float getAverageLoudness() const { return _averageLoudness; }
+    float getBrowAudioLift() const { return _browAudioLift; }
+
+    void setLeftEyeBlink(float leftEyeBlink) { _leftEyeBlink = leftEyeBlink; }
+    void setRightEyeBlink(float rightEyeBlink) { _rightEyeBlink = rightEyeBlink; }
+    void setBrowAudioLift(float browAudioLift) { _browAudioLift = browAudioLift; }
+    void setAverageLoudness(float averageLoudness) { _averageLoudness = averageLoudness; }
 
 protected:
     // degrees
@@ -92,9 +113,11 @@ protected:
 
     QVector<float> _blendshapeCoefficients;
     QVector<float> _transientBlendshapeCoefficients;
-    QVector<float> _summedBlendshapeCoefficients;
+    mutable QVector<float> _summedBlendshapeCoefficients; // changes protected by mutex in getSummedBlendshapeCoefficients()
     AvatarData* _owningAvatar;
 
+    mutable std::atomic<bool> _summedBlendshapesDirty { false };
+    mutable std::mutex _summedBlendshapesMutex;
 private:
     // privatize copy ctor and assignment operator so copies of this object cannot be made
     HeadData(const HeadData&);

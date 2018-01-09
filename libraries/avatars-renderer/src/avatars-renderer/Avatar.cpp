@@ -101,7 +101,8 @@ void Avatar::setShowNamesAboveHeads(bool show) {
     showNamesAboveHeads = show;
 }
 
-Avatar::Avatar(QThread* thread) :
+Avatar::Avatar(QThread* thread, HeadData* headData) :
+    AvatarData(headData ? headData : new Head(this)),
     _voiceSphereID(GeometryCache::UNKNOWN_ID)
 {
     // we may have been created in the network thread, but we live in the main thread

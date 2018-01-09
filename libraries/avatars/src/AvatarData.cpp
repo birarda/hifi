@@ -78,24 +78,19 @@ size_t AvatarDataPacket::maxJointDataSize(size_t numJoints) {
 }
 
 
-AvatarData::AvatarData() :
+AvatarData::AvatarData(HeadData* headData) :
     SpatiallyNestable(NestableType::Avatar, QUuid()),
     _handPosition(0.0f),
     _targetScale(1.0f),
     _handState(0),
     _keyState(NO_KEY_DOWN),
-    _forceFaceTrackerConnected(false),
-    _headData(NULL),
+    _headData(headData ? headData : new HeadData(this)),
     _errorLogExpiry(0),
     _owningAvatarMixer(),
     _targetVelocity(0.0f),
     _density(DEFAULT_AVATAR_DENSITY)
 {
     connect(this, &AvatarData::lookAtSnappingChanged, this, &AvatarData::markIdentityDataChanged);
-}
-
-AvatarData::~AvatarData() {
-    delete _headData;
 }
 
 // We cannot have a file-level variable (const or otherwise) in the AvatarInfo if it uses PathUtils, because that references Application, which will not yet initialized.
@@ -175,17 +170,6 @@ void AvatarData::setHandPosition(const glm::vec3& handPosition) {
     _handPosition = glm::inverse(getWorldOrientation()) * (handPosition - getWorldPosition());
 }
 
-void AvatarData::lazyInitHeadData() const {
-    // lazily allocate memory for HeadData in case we're not an Avatar instance
-    if (!_headData) {
-        _headData = new HeadData(const_cast<AvatarData*>(this));
-    }
-    if (_forceFaceTrackerConnected) {
-        _headData->_isFaceTrackerConnected = true;
-    }
-}
-
-
 float AvatarData::getDistanceBasedMinRotationDOT(glm::vec3 viewerPosition) const {
     auto distance = glm::distance(_globalPosition, viewerPosition);
     float result = ROTATION_CHANGE_179D; // assume worst
@@ -224,8 +208,6 @@ QByteArray AvatarData::toByteArray(AvatarDataDetail dataDetail, quint64 lastSent
     bool sendAll = (dataDetail == SendAllData);
     bool sendMinimum = (dataDetail == MinimumData);
     bool sendPALMinimum = (dataDetail == PALMinimum);
-
-    lazyInitHeadData();
 
     // special case, if we were asked for no data, then just include the flags all set to nothing
     if (dataDetail == NoData) {
@@ -438,11 +420,11 @@ QByteArray AvatarData::toByteArray(AvatarDataDetail dataDetail, quint64 lastSent
             setAtBit(flags, HAND_STATE_FINGER_POINTING_BIT);
         }
         // face tracker state
-        if (_headData->_isFaceTrackerConnected) {
+        if (_headData->getIsFaceTrackerConnected()) {
             setAtBit(flags, IS_FACE_TRACKER_CONNECTED);
         }
         // eye tracker state
-        if (_headData->_isEyeTrackerConnected) {
+        if (_headData->getIsEyeTrackerConnected()) {
             setAtBit(flags, IS_EYE_TRACKER_CONNECTED);
         }
         // referential state
@@ -493,10 +475,10 @@ QByteArray AvatarData::toByteArray(AvatarDataDetail dataDetail, quint64 lastSent
         auto faceTrackerInfo = reinterpret_cast<AvatarDataPacket::FaceTrackerInfo*>(destinationBuffer);
         const auto& blendshapeCoefficients = _headData->getSummedBlendshapeCoefficients();
 
-        faceTrackerInfo->leftEyeBlink = _headData->_leftEyeBlink;
-        faceTrackerInfo->rightEyeBlink = _headData->_rightEyeBlink;
-        faceTrackerInfo->averageLoudness = _headData->_averageLoudness;
-        faceTrackerInfo->browAudioLift = _headData->_browAudioLift;
+        faceTrackerInfo->leftEyeBlink = _headData->getLeftEyeBlink();
+        faceTrackerInfo->rightEyeBlink = _headData->getRightEyeBlink();
+        faceTrackerInfo->averageLoudness = _headData->getAverageLoudness();
+        faceTrackerInfo->browAudioLift = _headData->getBrowAudioLift();
         faceTrackerInfo->numBlendshapeCoefficients = blendshapeCoefficients.size();
         destinationBuffer += sizeof(AvatarDataPacket::FaceTrackerInfo);
 
@@ -723,9 +705,6 @@ const unsigned char* unpackFauxJoint(const unsigned char* sourceBuffer, ThreadSa
 
 // read data in packet starting at byte offset and return number of bytes parsed
 int AvatarData::parseDataFromBuffer(const QByteArray& buffer) {
-    // lazily allocate memory for HeadData in case we're not an Avatar instance
-    lazyInitHeadData();
-
     AvatarDataPacket::HasFlags packetStateFlags;
 
     const unsigned char* startPosition = reinterpret_cast<const unsigned char*>(buffer.data());
@@ -923,14 +902,14 @@ int AvatarData::parseDataFromBuffer(const QByteArray& buffer) {
 
         bool keyStateChanged = (_keyState != newKeyState);
         bool handStateChanged = (_handState != newHandState);
-        bool faceStateChanged = (_headData->_isFaceTrackerConnected != newFaceTrackerConnected);
-        bool eyeStateChanged = (_headData->_isEyeTrackerConnected != newEyeTrackerConnected);
+        bool faceStateChanged = (_headData->getIsFaceTrackerConnected() != newFaceTrackerConnected);
+        bool eyeStateChanged = (_headData->getIsEyeTrackerConnected() != newEyeTrackerConnected);
         bool somethingChanged = keyStateChanged || handStateChanged || faceStateChanged || eyeStateChanged;
 
         _keyState = newKeyState;
         _handState = newHandState;
-        _headData->_isFaceTrackerConnected = newFaceTrackerConnected;
-        _headData->_isEyeTrackerConnected = newEyeTrackerConnected;
+        _headData->setIsFaceTrackerConnected(newFaceTrackerConnected);
+        _headData->setIsEyeTrackerConnected(newEyeTrackerConnected);
 
         sourceBuffer += sizeof(AvatarDataPacket::AdditionalFlags);
 
@@ -993,17 +972,17 @@ int AvatarData::parseDataFromBuffer(const QByteArray& buffer) {
         auto faceTrackerInfo = reinterpret_cast<const AvatarDataPacket::FaceTrackerInfo*>(sourceBuffer);
         sourceBuffer += sizeof(AvatarDataPacket::FaceTrackerInfo);
 
-        _headData->_leftEyeBlink = faceTrackerInfo->leftEyeBlink;
-        _headData->_rightEyeBlink = faceTrackerInfo->rightEyeBlink;
-        _headData->_averageLoudness = faceTrackerInfo->averageLoudness;
-        _headData->_browAudioLift = faceTrackerInfo->browAudioLift;
+        _headData->setLeftEyeBlink(faceTrackerInfo->leftEyeBlink);
+        _headData->setRightEyeBlink(faceTrackerInfo->rightEyeBlink);
+        _headData->setAverageLoudness(faceTrackerInfo->averageLoudness);
+        _headData->setBrowAudioLift(faceTrackerInfo->browAudioLift);
 
         int numCoefficients = faceTrackerInfo->numBlendshapeCoefficients;
         const int coefficientsSize = sizeof(float) * numCoefficients;
         PACKET_READ_CHECK(FaceTrackerCoefficients, coefficientsSize);
-        _headData->_blendshapeCoefficients.resize(numCoefficients);  // make sure there's room for the copy!
-        _headData->_transientBlendshapeCoefficients.resize(numCoefficients);
-        memcpy(_headData->_blendshapeCoefficients.data(), sourceBuffer, coefficientsSize);
+
+        _headData->setBlendshapeCoefficientsFromBuffer(reinterpret_cast<const float*>(sourceBuffer), numCoefficients);
+
         sourceBuffer += coefficientsSize;
         int numBytesRead = sourceBuffer - startSection;
         _faceTrackerRate.increment(numBytesRead);
@@ -2058,13 +2037,13 @@ QJsonObject AvatarData::toJson() const {
     }
     root[JSON_AVATAR_JOINT_ARRAY] = jointArray;
 
-    const HeadData* head = getHeadData();
-    if (head) {
-        auto headJson = head->toJson();
-        if (!headJson.isEmpty()) {
-            root[JSON_AVATAR_HEAD] = headJson;
-        }
+    const auto& head = getHeadData();
+
+    auto headJson = head.toJson();
+    if (!headJson.isEmpty()) {
+        root[JSON_AVATAR_HEAD] = headJson;
     }
+
     return root;
 }
 
@@ -2120,9 +2099,6 @@ void AvatarData::fromJson(const QJsonObject& json, bool useFrameSkeleton) {
 
     // Do after avatar orientation because head look-at needs avatar orientation.
     if (json.contains(JSON_AVATAR_HEAD)) {
-        if (!_headData) {
-            _headData = new HeadData(this);
-        }
         _headData->fromJson(json[JSON_AVATAR_HEAD].toObject());
     }
 

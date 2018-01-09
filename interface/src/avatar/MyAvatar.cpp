@@ -84,7 +84,7 @@ const float MyAvatar::ZOOM_DEFAULT = 1.5f;
 const float MIN_SCALE_CHANGED_DELTA = 0.001f;
 
 MyAvatar::MyAvatar(QThread* thread) :
-    Avatar(thread),
+    Avatar(thread, new MyHead(this)),
     _yawSpeed(YAW_SPEED_DEFAULT),
     _pitchSpeed(PITCH_SPEED_DEFAULT),
     _scriptedMotorTimescale(DEFAULT_SCRIPTED_MOTOR_TIMESCALE),
@@ -109,10 +109,6 @@ MyAvatar::MyAvatar(QThread* thread) :
     _audioListenerMode(FROM_HEAD),
     _hmdAtRestDetector(glm::vec3(0), glm::quat())
 {
-
-    // give the pointer to our head to inherited _headData variable from AvatarData
-    _headData = new MyHead(this);
-
     _skeletonModel = std::make_shared<MySkeletonModel>(this, nullptr);
     connect(_skeletonModel.get(), &Model::setURLFinished, this, &Avatar::setModelURLFinished);
     connect(_skeletonModel.get(), &Model::rigReady, this, &Avatar::rigReady);
@@ -205,15 +201,14 @@ MyAvatar::MyAvatar(QThread* thread) :
             setAttachmentData(dummyAvatar.getAttachmentData());
         }
 
-        auto headData = dummyAvatar.getHeadData();
-        if (headData && _headData) {
-            // blendshapes
-            if (!headData->getBlendshapeCoefficients().isEmpty()) {
-                _headData->setBlendshapeCoefficients(headData->getBlendshapeCoefficients());
-            }
-            // head orientation
-            _headData->setLookAtPosition(headData->getLookAtPosition());
+        const auto& headData = dummyAvatar.getHeadData();
+
+        // blendshapes
+        if (!headData.getBlendshapeCoefficients().isEmpty()) {
+            _headData->setBlendshapeCoefficients(headData.getBlendshapeCoefficients());
         }
+        // head orientation
+        _headData->setLookAtPosition(headData.getLookAtPosition());
 
         auto jointData = dummyAvatar.getRawJointData();
         if (jointData.length() > 0) {
@@ -3246,7 +3241,7 @@ void MyAvatar::updateHoldActions(const AnimPose& prePhysicsPose, const AnimPose&
 }
 
 const MyHead* MyAvatar::getMyHead() const {
-    return static_cast<const MyHead*>(getHead());
+    return dynamic_cast<const MyHead*>(_headData.get());
 }
 
 void MyAvatar::setModelScale(float scale) {

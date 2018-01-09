@@ -75,7 +75,7 @@ public:
     static void setShowCollisionShapes(bool render);
     static void setShowNamesAboveHeads(bool show);
 
-    explicit Avatar(QThread* thread);
+    explicit Avatar(QThread* thread, HeadData* headData = nullptr);
     ~Avatar();
 
     virtual void instantiableAvatar() = 0;
@@ -108,8 +108,8 @@ public:
     SkeletonModelPointer getSkeletonModel() { return _skeletonModel; }
     const SkeletonModelPointer getSkeletonModel() const { return _skeletonModel; }
     glm::vec3 getChestPosition() const;
-    const Head* getHead() const { return static_cast<const Head*>(_headData); }
-    Head* getHead() { return static_cast<Head*>(_headData); }
+    const Head* getHead() const { return dynamic_cast<const Head*>(_headData.get()); }
+    Head* getHead() { return dynamic_cast<Head*>(_headData.get()); }
 
     AABox getBounds() const;
 

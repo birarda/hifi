@@ -30,7 +30,6 @@ HeadData::HeadData(AvatarData* owningAvatar) :
     _lookAtPosition(0.0f, 0.0f, 0.0f),
     _blendshapeCoefficients(QVector<float>(0, 0.0f)),
     _transientBlendshapeCoefficients(QVector<float>(0, 0.0f)),
-    _summedBlendshapeCoefficients(QVector<float>(0, 0.0f)),
     _owningAvatar(owningAvatar)
 {
 
@@ -83,25 +82,49 @@ static const QMap<QString, int>& getBlendshapesLookupMap() {
     return blendshapeLookupMap;
 }
 
+void HeadData::setBlendshapeCoefficients(QVector<float> blendshapeCoefficients) {
+    _blendshapeCoefficients = blendshapeCoefficients;
+
+    _summedBlendshapesDirty.store(true);
+}
+
+void HeadData::setBlendshapeCoefficientsFromBuffer(const float *sourceBuffer, int numCoefficients) {
+    _blendshapeCoefficients.resize(numCoefficients);
+    _transientBlendshapeCoefficients.resize(numCoefficients);
+
+    memcpy(_blendshapeCoefficients.data(), sourceBuffer, numCoefficients * sizeof(float));
+
+    _summedBlendshapesDirty.store(true);
+}
+
 int HeadData::getNumSummedBlendshapeCoefficients() const {
     int maxSize = std::max(_blendshapeCoefficients.size(), _transientBlendshapeCoefficients.size());
     return maxSize;
 }
 
-const QVector<float>& HeadData::getSummedBlendshapeCoefficients() {
-    int maxSize = std::max(_blendshapeCoefficients.size(), _transientBlendshapeCoefficients.size());
-    if (_summedBlendshapeCoefficients.size() != maxSize) {
-        _summedBlendshapeCoefficients.resize(maxSize);
-    }
+QVector<float> HeadData::getSummedBlendshapeCoefficients() const {
+    // lock the mutex so it is safe to copy or change the summed blendshapes
+    std::lock_guard<std::mutex> lock(_summedBlendshapesMutex);
 
-    for (int i = 0; i < maxSize; i++) {
-        if (i >= _blendshapeCoefficients.size()) {
-            _summedBlendshapeCoefficients[i] = _transientBlendshapeCoefficients[i];
-        } else if (i >= _transientBlendshapeCoefficients.size()) {
-            _summedBlendshapeCoefficients[i] = _blendshapeCoefficients[i];
-        } else {
-            _summedBlendshapeCoefficients[i] = _blendshapeCoefficients[i] + _transientBlendshapeCoefficients[i];
+    // check if the summed blendshapes need to be re-generated
+    if (_summedBlendshapesDirty.load()) {
+        int maxSize = std::max(_blendshapeCoefficients.size(), _transientBlendshapeCoefficients.size());
+
+        if (_summedBlendshapeCoefficients.size() != maxSize) {
+            _summedBlendshapeCoefficients.resize(maxSize);
         }
+
+        for (int i = 0; i < maxSize; i++) {
+            if (i >= _blendshapeCoefficients.size()) {
+                _summedBlendshapeCoefficients[i] = _transientBlendshapeCoefficients[i];
+            } else if (i >= _transientBlendshapeCoefficients.size()) {
+                _summedBlendshapeCoefficients[i] = _blendshapeCoefficients[i];
+            } else {
+                _summedBlendshapeCoefficients[i] = _blendshapeCoefficients[i] + _transientBlendshapeCoefficients[i];
+            }
+        }
+
+        _summedBlendshapesDirty.store(false);
     }
 
     return _summedBlendshapeCoefficients;
@@ -120,6 +143,8 @@ void HeadData::setBlendshape(QString name, float val) {
             _transientBlendshapeCoefficients.resize(it.value() + 1);
         }
         _blendshapeCoefficients[it.value()] = val;
+
+        _summedBlendshapesDirty.store(true);
     }
 }
 

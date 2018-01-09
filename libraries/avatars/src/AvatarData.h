@@ -382,8 +382,7 @@ public:
     static void fromFrame(const QByteArray& frameData, AvatarData& avatar, bool useFrameSkeleton = true);
     static QByteArray toFrame(const AvatarData& avatar);
 
-    AvatarData();
-    virtual ~AvatarData();
+    AvatarData(HeadData* headData = nullptr);
 
     static const QUrl& defaultFullAvatarModelUrl();
     QUrl cannonicalSkeletonModelURL(const QUrl& empty) const;
@@ -433,26 +432,13 @@ public:
 
     virtual void updateAttitude(const glm::quat& orientation) {}
 
-    glm::quat getHeadOrientation() const {
-        lazyInitHeadData();
-        return _headData->getOrientation();
-    }
-    void setHeadOrientation(const glm::quat& orientation) {
-        if (_headData) {
-            _headData->setOrientation(orientation);
-        }
-    }
+    glm::quat getHeadOrientation() const { return _headData->getOrientation(); }
+    void setHeadOrientation(const glm::quat& orientation) { _headData->setOrientation(orientation); }
 
-    void setLookAtPosition(const glm::vec3& lookAtPosition) {
-        if (_headData) {
-            _headData->setLookAtPosition(lookAtPosition);
-        }
-    }
+    void setLookAtPosition(const glm::vec3& lookAtPosition) { _headData->setLookAtPosition(lookAtPosition); }
 
     void setBlendshapeCoefficients(const QVector<float>& blendshapeCoefficients) {
-        if (_headData) {
-            _headData->setBlendshapeCoefficients(blendshapeCoefficients);
-        }
+        _headData->setBlendshapeCoefficients(blendshapeCoefficients);
     }
 
     // access to Head().set/getMousePitch (degrees)
@@ -572,13 +558,13 @@ public:
     Q_INVOKABLE void updateAvatarEntity(const QUuid& entityID, const QByteArray& entityData);
     Q_INVOKABLE void clearAvatarEntity(const QUuid& entityID);
 
-    Q_INVOKABLE void setForceFaceTrackerConnected(bool connected) { _forceFaceTrackerConnected = connected; }
+    Q_INVOKABLE void setForceFaceTrackerConnected(bool connected) { _headData->setIsFaceTrackerConnected(connected); }
 
     // key state
     void setKeyState(KeyState s) { _keyState = s; }
     KeyState keyState() const { return _keyState; }
 
-    const HeadData* getHeadData() const { return _headData; }
+    const HeadData& getHeadData() const { return *_headData; }
 
     struct Identity {
         QUrl skeletonModelURL;
@@ -710,8 +696,6 @@ public slots:
     void resetLastSent() { _lastToByteArray = 0; }
 
 protected:
-    void lazyInitHeadData() const;
-
     float getDistanceBasedMinRotationDOT(glm::vec3 viewerPosition) const;
     float getDistanceBasedMinTranslationDistance(glm::vec3 viewerPosition) const;
 
@@ -724,7 +708,7 @@ protected:
     bool faceTrackerInfoChangedSince(quint64 time) const { return true; } // FIXME
 
     bool hasParent() const { return !getParentID().isNull(); }
-    bool hasFaceTracker() const { return _headData ? _headData->_isFaceTrackerConnected : false; }
+    bool hasFaceTracker() const { return _headData->getIsFaceTrackerConnected(); }
 
     // isReplicated will be true on downstream Avatar Mixers and their clients, but false on the upstream "master"
     // Audio Mixer that the replicated avatar is connected to.
@@ -749,10 +733,9 @@ protected:
     // key state
     KeyState _keyState;
 
-    bool _forceFaceTrackerConnected;
     bool _hasNewJointData { true }; // set in AvatarData, cleared in Avatar
 
-    mutable HeadData* _headData { nullptr };
+    std::unique_ptr<HeadData> _headData;
 
     QUrl _skeletonModelURL;
     bool _firstSkeletonCheck { true };

@@ -22,6 +22,7 @@
 #include <Rig.h>
 #include <Sound.h>
 #include <ScriptEngine.h>
+#include <ThreadSafeValueCache.h>
 
 #include <controllers/Pose.h>
 #include <controllers/Actions.h>
@@ -31,7 +32,6 @@
 
 #include "AtRestDetector.h"
 #include "MyCharacterController.h"
-#include <ThreadSafeValueCache.h>
 
 class AvatarActionHold;
 class ModelItemID;
@@ -841,6 +841,7 @@ private:
 
     // height of user in sensor space, when standing erect.
     ThreadSafeValueCache<float> _userHeight { DEFAULT_AVATAR_HEIGHT };
+
 };
 
 QScriptValue audioListenModeToScriptValue(QScriptEngine* engine, const AudioListenerMode& audioListenerMode);
