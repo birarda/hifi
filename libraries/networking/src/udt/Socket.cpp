@@ -260,6 +260,7 @@ qint64 Socket::writeDatagram(const QByteArray& datagram, const HifiSockAddr& soc
 //        qCDebug(networking) << "Socket::writeDatagram" << _udpSocket.error();
 
         qCDebug(networking) << "Error sending packet of size" << datagram.size() << "to" << sockAddr;
+        qCDebug(networking) << errno << strerror(errno);
     }
 
     return bytesWritten;
