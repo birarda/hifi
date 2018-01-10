@@ -436,6 +436,19 @@ void AvatarMixerSlave::broadcastAvatarDataToAgent(const SharedNodePointer& node)
 
         quint64 endAvatarDataPacking = usecTimestampNow();
         _stats.avatarDataPackingElapsedTime += (endAvatarDataPacking - startAvatarDataPacking);
+
+        if (avatarPacketList->getNumPackets() >= 2) {
+            // we have a completed packet in the list, pop the front off and send it now
+            quint64 startPacketSending = usecTimestampNow();
+
+            _stats.numPacketsSent += 1;
+
+            auto packet = avatarPacketList->takeFront<NLPacket>();
+            nodeList->sendPacket(std::move(packet), *node);
+
+            quint64 endPacketSending = usecTimestampNow();
+            _stats.packetSendingElapsedTime += (endPacketSending - startPacketSending);
+        }
     }
 
     quint64 startPacketSending = usecTimestampNow();
@@ -444,10 +457,14 @@ void AvatarMixerSlave::broadcastAvatarDataToAgent(const SharedNodePointer& node)
     avatarPacketList->closeCurrentPacket(true);
 
     _stats.numPacketsSent += (int)avatarPacketList->getNumPackets();
-    _stats.numBytesSent += numAvatarDataBytes;
 
     // send the avatar data PacketList
     nodeList->sendPacketList(std::move(avatarPacketList), *node);
+
+    _stats.numBytesSent += numAvatarDataBytes;
+
+    quint64 endPacketSending = usecTimestampNow();
+    _stats.packetSendingElapsedTime += (endPacketSending - startPacketSending);
 
     // record the bytes sent for other avatar data in the AvatarMixerClientData
     nodeData->recordSentAvatarData(numAvatarDataBytes);
@@ -455,9 +472,6 @@ void AvatarMixerSlave::broadcastAvatarDataToAgent(const SharedNodePointer& node)
     // record the number of avatars held back this frame
     nodeData->recordNumOtherAvatarStarves(numAvatarsHeldBack);
     nodeData->recordNumOtherAvatarSkips(numAvatarsWithSkippedFrames);
-
-    quint64 endPacketSending = usecTimestampNow();
-    _stats.packetSendingElapsedTime += (endPacketSending - startPacketSending);
 }
 
 uint64_t REBROADCAST_IDENTITY_TO_DOWNSTREAM_EVERY_US = 5 * 1000 * 1000;

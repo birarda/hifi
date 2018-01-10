@@ -63,6 +63,9 @@ public:
     template<typename T> qint64 writePrimitive(const T& data);
 
     qint64 writeString(const QString& string);
+
+    // Takes the first packet of the list and returns it.
+    template<typename T> std::unique_ptr<T> takeFront();
     
 protected:
     PacketList(PacketType packetType, QByteArray extendedHeader = QByteArray(), bool isReliable = false, bool isOrdered = false);
@@ -87,9 +90,6 @@ private:
     
     PacketList(const PacketList& other) = delete;
     PacketList& operator=(const PacketList& other) = delete;
-    
-    // Takes the first packet of the list and returns it.
-    template<typename T> std::unique_ptr<T> takeFront();
     
     // Creates a new packet, can be overriden to change return underlying type
     virtual std::unique_ptr<Packet> createPacket();
