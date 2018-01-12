@@ -24,6 +24,7 @@
 #include <SharedUtil.h>
 
 #include "../NetworkLogging.h"
+#include "../NLPacket.h"
 #include "ControlPacket.h"
 #include "Packet.h"
 #include "PacketList.h"
@@ -259,7 +260,16 @@ bool SendQueue::sendNewPacketAndAddToSentList(std::unique_ptr<Packet> newPacket,
     // Save packet/payload size before we move it
     auto packetSize = newPacket->getWireSize();
     auto payloadSize = newPacket->getPayloadSize();
-    
+
+    if (_destination.getPort() == 55555) {
+        qDebug(networking) << "Sending new packet - SN:" << (uint32_t) sequenceNumber
+            << "Type:" << NLPacket::typeInHeader(*newPacket)
+            << "Data Size:" << newPacket->getDataSize()
+            << "Wire Size:" << newPacket->getWireSize()
+            << "Data Hash:" << QCryptographicHash::hash(QByteArray(newPacket->getData(), newPacket->getDataSize()),
+                                                        QCryptographicHash::Md5);
+    }
+
     auto bytesWritten = sendPacket(*newPacket);
 
     emit packetSent(packetSize, payloadSize, sequenceNumber, p_high_resolution_clock::now());
@@ -505,6 +515,15 @@ bool SendQueue::maybeResendPacket() {
 
                     // Obfuscate packet
                     packet->obfuscate(level);
+
+                    if (_destination.getPort() == 55555) {
+                        qDebug(networking) << "Resending packet - SN:" << (uint32_t) resendNumber
+                        << "Type:" << NLPacket::typeInHeader(resendPacket)
+                        << "Data Size:" << resendPacket.getDataSize()
+                        << "Wire Size:" << resendPacket.getWireSize()
+                        << "Data Hash:" << QCryptographicHash::hash(QByteArray(resendPacket.getData(), resendPacket.getDataSize()),
+                                                                    QCryptographicHash::Md5);
+                    }
 
                     // send it off
                     sendPacket(*packet);
