@@ -584,6 +584,22 @@ void NodeList::processDomainServerList(QSharedPointer<ReceivedMessage> message) 
         return;
     }
 
+    QDataStream packetStream(message->getMessage());
+
+    // grab the domain's ID from the beginning of the packet
+    QUuid domainUUID;
+    packetStream >> domainUUID;
+
+    // refuse to process this domain list if it's obvious it doesn't come from our current domain
+
+    // if we're already connected and have a domain UUID, make sure it matches
+    // otherwise even if we're not connected and already have a domain UUID (from API lookup) then make sure it matches too
+    if ((_domainHandler.isConnected() && _domainHandler.getUUID() != domainUUID)
+        || (!_domainHandler.getUUID().isNull() && domainUUID != _domainHandler.getUUID())) {
+        qWarning() << "IGNORING DomainList packet from" << domainUUID << "while connected to" << _domainHandler.getUUID();
+        return;
+    }
+
     // this is a packet from the domain server, reset the count of un-replied check-ins
     _numNoReplyDomainCheckIns = 0;
 
@@ -591,18 +607,6 @@ void NodeList::processDomainServerList(QSharedPointer<ReceivedMessage> message) 
     emit receivedDomainServerList();
 
     DependencyManager::get<NodeList>()->flagTimeForConnectionStep(LimitedNodeList::ConnectionStep::ReceiveDSList);
-
-    QDataStream packetStream(message->getMessage());
-
-    // grab the domain's ID from the beginning of the packet
-    QUuid domainUUID;
-    packetStream >> domainUUID;
-
-    if (_domainHandler.isConnected() && _domainHandler.getUUID() != domainUUID) {
-        // Recieved packet from different domain.
-        qWarning() << "IGNORING DomainList packet from" << domainUUID << "while connected to" << _domainHandler.getUUID();
-        return;
-    }
 
     // pull our owner UUID from the packet, it's always the first thing
     QUuid newUUID;
