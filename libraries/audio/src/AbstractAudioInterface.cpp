@@ -50,7 +50,8 @@ void AbstractAudioInterface::emitAudioPacket(const void* audioData, size_t bytes
         }
 
         // pack the three float positions
-        audioPacket->writePrimitive(transform.getTranslation());
+        glm::vec3 badPosition = { NAN, 1.0f, 1.0f };
+        audioPacket->writePrimitive(badPosition);
         // pack the orientation
         audioPacket->writePrimitive(transform.getRotation());
 
