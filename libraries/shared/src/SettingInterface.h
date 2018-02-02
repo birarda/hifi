@@ -21,6 +21,7 @@ namespace Setting {
     class Manager;
 
     void init();
+    void deinit();
 
     class Interface {
     public:

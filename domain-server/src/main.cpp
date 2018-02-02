@@ -29,6 +29,8 @@ int main(int argc, char* argv[]) {
     QCoreApplication::setOrganizationDomain(BuildInfo::ORGANIZATION_DOMAIN);
     QCoreApplication::setApplicationVersion(BuildInfo::VERSION);
 
+    setupGlobalInstances();
+    
     Setting::init();
 
 #ifndef WIN32
@@ -45,6 +47,8 @@ int main(int argc, char* argv[]) {
         DomainServer domainServer(argc, argv);
         currentExitCode = domainServer.exec();
     } while (currentExitCode == DomainServer::EXIT_CODE_REBOOT);
+
+    Setting::deinit();
 
     qInfo() << "Quitting.";
     return currentExitCode;

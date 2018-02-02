@@ -23,6 +23,7 @@ namespace Setting {
         // Cleanup timer
         stopTimer();
         delete _saveTimer;
+        _saveTimer = nullptr;
 
         // Save all settings before exit
         saveAll();

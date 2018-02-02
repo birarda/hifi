@@ -19,15 +19,20 @@
 
 using namespace std;
 
-int main(int argc, char * argv[]) {
+int main(int argc, char* argv[]) {
     QCoreApplication::setApplicationName(BuildInfo::AC_CLIENT_SERVER_NAME);
     QCoreApplication::setOrganizationName(BuildInfo::MODIFIED_ORGANIZATION);
     QCoreApplication::setOrganizationDomain(BuildInfo::ORGANIZATION_DOMAIN);
     QCoreApplication::setApplicationVersion(BuildInfo::VERSION);
 
+    setupGlobalInstances();
+    
     Setting::init();
 
     ACClientApp app(argc, argv);
+    int exitCode = app.exec();
 
-    return app.exec();
+    Setting::deinit();
+
+    return exitCode;
 }
