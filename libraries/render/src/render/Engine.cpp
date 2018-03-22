@@ -52,10 +52,9 @@ void Engine::load() {
     } else if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
         qWarning() << "Engine configuration file" << path << "cannot be opened";
     } else {
-        QString data = file.readAll();
-        file.close();
         QJsonParseError error;
-        QJsonDocument doc = QJsonDocument::fromJson(data.toUtf8(), &error);
+        QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &error);
+        file.close();
         if (error.error == error.NoError) {
             config->setPresetList(doc.object());
             qCDebug(renderlogging) << "Engine configuration file" << path << "loaded";

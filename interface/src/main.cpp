@@ -31,6 +31,8 @@
 #include "UserActivityLogger.h"
 #include "MainWindow.h"
 
+#include "Profile.h"
+
 #ifdef Q_OS_WIN
 extern "C" {
     typedef int(__stdcall * CHECKMINSPECPROC) ();
@@ -38,6 +40,10 @@ extern "C" {
 #endif
 
 int main(int argc, const char* argv[]) {
+    auto tracer = DependencyManager::set<tracing::Tracer>();
+    tracer->startTracing();
+    PROFILE_SYNC_BEGIN(startup, "main startup", "");
+
     setupHifiApplication(BuildInfo::INTERFACE_NAME);
 
 #ifdef Q_OS_LINUX
@@ -233,9 +239,13 @@ int main(int argc, const char* argv[]) {
         // Extend argv to enable WebGL rendering
         std::vector<const char*> argvExtended(&argv[0], &argv[argc]);
         argvExtended.push_back("--ignore-gpu-blacklist");
+        argvExtended.push_back("--suppress-settings-reset");
         int argcExtended = (int)argvExtended.size();
 
+        PROFILE_SYNC_END(startup, "main startup", "");
+        PROFILE_SYNC_BEGIN(startup, "app full ctor", "");
         Application app(argcExtended, const_cast<char**>(argvExtended.data()), startupTime, runningMarkerExisted);
+        PROFILE_SYNC_END(startup, "app full ctor", "");
 
 #if 0
         // If we failed the OpenGLVersion check, log it.
@@ -271,13 +281,25 @@ int main(int argc, const char* argv[]) {
         translator.load("i18n/interface_en");
         app.installTranslator(&translator);
         qCDebug(interfaceapp, "Created QT Application.");
+
+        QTimer exitTimer;
+        exitTimer.setSingleShot(true);
+        QObject::connect(&exitTimer, &QTimer::timeout, [&] {
+            app.quit();
+        });
+        exitTimer.start(2 * 1000);
+        
         exitCode = app.exec();
         server.close();
+
+        tracer->stopTracing();
+        tracer->serialize(QStandardPaths::writableLocation(QStandardPaths::DesktopLocation) + "/Traces/trace-startup.json.gz");
     }
 
     Application::shutdownPlugins();
 
     qCDebug(interfaceapp, "Normal exit.");
+
 #if !defined(DEBUG) && !defined(Q_OS_LINUX)
     // HACK: exit immediately (don't handle shutdown callbacks) for Release build
     _exit(exitCode);

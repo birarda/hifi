@@ -336,6 +336,7 @@ void Bloom::configure(const Config& config) {
 }
 
 void Bloom::build(JobModel& task, const render::Varying& inputs, render::Varying& outputs) {
+    PROFILE_RANGE(startup, "Bloom::build");
     // Start by computing threshold of color buffer input at quarter resolution
     const auto bloomInputBuffer = task.addJob<BloomThreshold>("BloomThreshold", inputs, 4U);
 

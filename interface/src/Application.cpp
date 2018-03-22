@@ -705,187 +705,191 @@ extern InputPluginList getInputPlugins();
 extern void saveInputPluginSettings(const InputPluginList& plugins);
 
 bool setupEssentials(int& argc, char** argv, bool runningMarkerExisted) {
-    const char** constArgv = const_cast<const char**>(argv);
+    bool previousSessionCrashed;
+    {
+        PROFILE_RANGE(startup, "SetupEssentials");
+        const char** constArgv = const_cast<const char**>(argv);
 
-    // HRS: I could not figure out how to move these any earlier in startup, so when using this option, be sure to also supply
-    // --allowMultipleInstances
-    auto reportAndQuit = [&](const char* commandSwitch, std::function<void(FILE* fp)> report) {
-        const char* reportfile = getCmdOption(argc, constArgv, commandSwitch);
-        // Reports to the specified file, because stdout is set up to be captured for logging.
-        if (reportfile) {
-            FILE* fp = fopen(reportfile, "w");
-            if (fp) {
-                report(fp);
-                fclose(fp);
-                if (!runningMarkerExisted) { // don't leave ours around
-                    RunningMarker runingMarker(RUNNING_MARKER_FILENAME);
-                    runingMarker.deleteRunningMarkerFile(); // happens in deleter, but making the side-effect explicit.
+        // HRS: I could not figure out how to move these any earlier in startup, so when using this option, be sure to also supply
+        // --allowMultipleInstances
+        auto reportAndQuit = [&](const char* commandSwitch, std::function<void(FILE* fp)> report) {
+            const char* reportfile = getCmdOption(argc, constArgv, commandSwitch);
+            // Reports to the specified file, because stdout is set up to be captured for logging.
+            if (reportfile) {
+                FILE* fp = fopen(reportfile, "w");
+                if (fp) {
+                    report(fp);
+                    fclose(fp);
+                    if (!runningMarkerExisted) { // don't leave ours around
+                        RunningMarker runingMarker(RUNNING_MARKER_FILENAME);
+                        runingMarker.deleteRunningMarkerFile(); // happens in deleter, but making the side-effect explicit.
+                    }
+                    _exit(0);
                 }
-                _exit(0);
+            }
+        };
+        reportAndQuit("--protocolVersion", [&](FILE* fp) {
+            auto version = protocolVersionsSignatureBase64();
+            fputs(version.toLatin1().data(), fp);
+        });
+        reportAndQuit("--version", [&](FILE* fp) {
+            fputs(BuildInfo::VERSION.toLatin1().data(), fp);
+        });
+
+        const char* portStr = getCmdOption(argc, constArgv, "--listenPort");
+        const int listenPort = portStr ? atoi(portStr) : INVALID_PORT;
+
+        static const auto SUPPRESS_SETTINGS_RESET = "--suppress-settings-reset";
+        bool suppressPrompt = cmdOptionExists(argc, const_cast<const char**>(argv), SUPPRESS_SETTINGS_RESET);
+        previousSessionCrashed = CrashHandler::checkForResetSettings(runningMarkerExisted, suppressPrompt);
+        // get dir to use for cache
+        static const auto CACHE_SWITCH = "--cache";
+        QString cacheDir = getCmdOption(argc, const_cast<const char**>(argv), CACHE_SWITCH);
+        if (!cacheDir.isEmpty()) {
+            qApp->setProperty(hifi::properties::APP_LOCAL_DATA_PATH, cacheDir);
+        }
+
+        // FIXME fix the OSX installer to install the resources.rcc binary instead of resource files and remove
+        // this conditional exclusion
+#if !defined(Q_OS_OSX)
+        {
+#if defined(Q_OS_ANDROID)
+            const QString resourcesBinaryFile = QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + "/resources.rcc";
+#else
+            const QString resourcesBinaryFile = QCoreApplication::applicationDirPath() + "/resources.rcc";
+#endif
+            if (!QFile::exists(resourcesBinaryFile)) {
+                throw std::runtime_error("Unable to find primary resources");
+            }
+            if (!QResource::registerResource(resourcesBinaryFile)) {
+                throw std::runtime_error("Unable to load primary resources");
             }
         }
-    };
-    reportAndQuit("--protocolVersion", [&](FILE* fp) {
-        auto version = protocolVersionsSignatureBase64();
-        fputs(version.toLatin1().data(), fp);
-    });
-    reportAndQuit("--version", [&](FILE* fp) {
-        fputs(BuildInfo::VERSION.toLatin1().data(), fp);
-    });
-
-    const char* portStr = getCmdOption(argc, constArgv, "--listenPort");
-    const int listenPort = portStr ? atoi(portStr) : INVALID_PORT;
-
-    static const auto SUPPRESS_SETTINGS_RESET = "--suppress-settings-reset";
-    bool suppressPrompt = cmdOptionExists(argc, const_cast<const char**>(argv), SUPPRESS_SETTINGS_RESET);
-    bool previousSessionCrashed = CrashHandler::checkForResetSettings(runningMarkerExisted, suppressPrompt);
-    // get dir to use for cache
-    static const auto CACHE_SWITCH = "--cache";
-    QString cacheDir = getCmdOption(argc, const_cast<const char**>(argv), CACHE_SWITCH);
-    if (!cacheDir.isEmpty()) {
-        qApp->setProperty(hifi::properties::APP_LOCAL_DATA_PATH, cacheDir);
-    }
-
-    // FIXME fix the OSX installer to install the resources.rcc binary instead of resource files and remove
-    // this conditional exclusion
-#if !defined(Q_OS_OSX)
-    {
-#if defined(Q_OS_ANDROID)
-        const QString resourcesBinaryFile = QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + "/resources.rcc";
-#else
-        const QString resourcesBinaryFile = QCoreApplication::applicationDirPath() + "/resources.rcc";
-#endif
-        if (!QFile::exists(resourcesBinaryFile)) {
-            throw std::runtime_error("Unable to find primary resources");
-        }
-        if (!QResource::registerResource(resourcesBinaryFile)) {
-            throw std::runtime_error("Unable to load primary resources");
-        }
-    }
 #endif
 
-    // Tell the plugin manager about our statically linked plugins
-    auto pluginManager = PluginManager::getInstance();
-    pluginManager->setInputPluginProvider([] { return getInputPlugins(); });
-    pluginManager->setDisplayPluginProvider([] { return getDisplayPlugins(); });
-    pluginManager->setInputPluginSettingsPersister([](const InputPluginList& plugins) { saveInputPluginSettings(plugins); });
-    if (auto steamClient = pluginManager->getSteamClientPlugin()) {
-        steamClient->init();
-    }
+        // Tell the plugin manager about our statically linked plugins
+        auto pluginManager = PluginManager::getInstance();
+        pluginManager->setInputPluginProvider([] { return getInputPlugins(); });
+        pluginManager->setDisplayPluginProvider([] { return getDisplayPlugins(); });
+        pluginManager->setInputPluginSettingsPersister([](const InputPluginList& plugins) { saveInputPluginSettings(plugins); });
+        if (auto steamClient = pluginManager->getSteamClientPlugin()) {
+            steamClient->init();
+        }
 
-    DependencyManager::set<tracing::Tracer>();
-    PROFILE_SET_THREAD_NAME("Main Thread");
+        PROFILE_SET_THREAD_NAME("Main Thread");
 
 #if defined(Q_OS_WIN)
-    // Select appropriate audio DLL
-    QString audioDLLPath = QCoreApplication::applicationDirPath();
-    if (IsWindows8OrGreater()) {
-        audioDLLPath += "/audioWin8";
-    } else {
-        audioDLLPath += "/audioWin7";
-    }
-    QCoreApplication::addLibraryPath(audioDLLPath);
+        // Select appropriate audio DLL
+        QString audioDLLPath = QCoreApplication::applicationDirPath();
+        if (IsWindows8OrGreater()) {
+            audioDLLPath += "/audioWin8";
+        } else {
+            audioDLLPath += "/audioWin7";
+        }
+        QCoreApplication::addLibraryPath(audioDLLPath);
 #endif
 
-    DependencyManager::registerInheritance<LimitedNodeList, NodeList>();
-    DependencyManager::registerInheritance<AvatarHashMap, AvatarManager>();
-    DependencyManager::registerInheritance<EntityDynamicFactoryInterface, InterfaceDynamicFactory>();
-    DependencyManager::registerInheritance<SpatialParentFinder, InterfaceParentFinder>();
+        DependencyManager::registerInheritance<LimitedNodeList, NodeList>();
+        DependencyManager::registerInheritance<AvatarHashMap, AvatarManager>();
+        DependencyManager::registerInheritance<EntityDynamicFactoryInterface, InterfaceDynamicFactory>();
+        DependencyManager::registerInheritance<SpatialParentFinder, InterfaceParentFinder>();
 
-    // Set dependencies
-    DependencyManager::set<PickManager>();
-    DependencyManager::set<PointerManager>();
-    DependencyManager::set<LaserPointerScriptingInterface>();
-    DependencyManager::set<RayPickScriptingInterface>();
-    DependencyManager::set<PointerScriptingInterface>();
-    DependencyManager::set<PickScriptingInterface>();
-    DependencyManager::set<Cursor::Manager>();
-    DependencyManager::set<VirtualPad::Manager>();
-    DependencyManager::set<DesktopPreviewProvider>();
-    DependencyManager::set<AccountManager>(std::bind(&Application::getUserAgent, qApp));
-    DependencyManager::set<StatTracker>();
-    DependencyManager::set<ScriptEngines>(ScriptEngine::CLIENT_SCRIPT);
-    DependencyManager::set<ScriptInitializerMixin, NativeScriptInitializers>();
-    DependencyManager::set<Preferences>();
-    DependencyManager::set<recording::Deck>();
-    DependencyManager::set<recording::Recorder>();
-    DependencyManager::set<AddressManager>();
-    DependencyManager::set<NodeList>(NodeType::Agent, listenPort);
-    DependencyManager::set<recording::ClipCache>();
-    DependencyManager::set<GeometryCache>();
-    DependencyManager::set<ModelCache>();
-    DependencyManager::set<ScriptCache>();
-    DependencyManager::set<SoundCache>();
-    DependencyManager::set<DdeFaceTracker>();
-    DependencyManager::set<EyeTracker>();
-    DependencyManager::set<AudioClient>();
-    DependencyManager::set<AudioScope>();
-    DependencyManager::set<DeferredLightingEffect>();
-    DependencyManager::set<TextureCache>();
-    DependencyManager::set<FramebufferCache>();
-    DependencyManager::set<AnimationCache>();
-    DependencyManager::set<ModelBlender>();
-    DependencyManager::set<UsersScriptingInterface>();
-    DependencyManager::set<AvatarManager>();
-    DependencyManager::set<LODManager>();
-    DependencyManager::set<StandAloneJSConsole>();
-    DependencyManager::set<DialogsManager>();
-    DependencyManager::set<BandwidthRecorder>();
-    DependencyManager::set<ResourceCacheSharedItems>();
-    DependencyManager::set<DesktopScriptingInterface>();
-    DependencyManager::set<EntityScriptingInterface>(true);
-    DependencyManager::set<GraphicsScriptingInterface>();
-    DependencyManager::registerInheritance<scriptable::ModelProviderFactory, ApplicationMeshProvider>();
-    DependencyManager::set<ApplicationMeshProvider>();
-    DependencyManager::set<RecordingScriptingInterface>();
-    DependencyManager::set<WindowScriptingInterface>();
-    DependencyManager::set<HMDScriptingInterface>();
-    DependencyManager::set<ResourceScriptingInterface>();
-    DependencyManager::set<TabletScriptingInterface>();
-    DependencyManager::set<InputConfiguration>();
-    DependencyManager::set<ToolbarScriptingInterface>();
-    DependencyManager::set<UserActivityLoggerScriptingInterface>();
-    DependencyManager::set<AssetMappingsScriptingInterface>();
-    DependencyManager::set<DomainConnectionModel>();
+        // Set dependencies
+        DependencyManager::set<PickManager>();
+        DependencyManager::set<PointerManager>();
+        DependencyManager::set<LaserPointerScriptingInterface>();
+        DependencyManager::set<RayPickScriptingInterface>();
+        DependencyManager::set<PointerScriptingInterface>();
+        DependencyManager::set<PickScriptingInterface>();
+        DependencyManager::set<Cursor::Manager>();
+        DependencyManager::set<VirtualPad::Manager>();
+        DependencyManager::set<DesktopPreviewProvider>();
+        DependencyManager::set<AccountManager>(std::bind(&Application::getUserAgent, qApp));
+        DependencyManager::set<StatTracker>();
+        DependencyManager::set<ScriptEngines>(ScriptEngine::CLIENT_SCRIPT);
+        DependencyManager::set<ScriptInitializerMixin, NativeScriptInitializers>();
+        DependencyManager::set<Preferences>();
+        DependencyManager::set<recording::Deck>();
+        DependencyManager::set<recording::Recorder>();
+        DependencyManager::set<AddressManager>();
+        DependencyManager::set<NodeList>(NodeType::Agent, listenPort);
+        DependencyManager::set<recording::ClipCache>();
+        DependencyManager::set<GeometryCache>();
+        DependencyManager::set<ModelCache>();
+        DependencyManager::set<ScriptCache>();
+        DependencyManager::set<SoundCache>();
+        DependencyManager::set<DdeFaceTracker>();
+        DependencyManager::set<EyeTracker>();
+        DependencyManager::set<AudioClient>();
+        DependencyManager::set<AudioScope>();
+        DependencyManager::set<DeferredLightingEffect>();
+        DependencyManager::set<TextureCache>();
+        DependencyManager::set<FramebufferCache>();
+        DependencyManager::set<AnimationCache>();
+        DependencyManager::set<ModelBlender>();
+        DependencyManager::set<UsersScriptingInterface>();
+        DependencyManager::set<AvatarManager>();
+        DependencyManager::set<LODManager>();
+        DependencyManager::set<StandAloneJSConsole>();
+        DependencyManager::set<DialogsManager>();
+        DependencyManager::set<BandwidthRecorder>();
+        DependencyManager::set<ResourceCacheSharedItems>();
+        DependencyManager::set<DesktopScriptingInterface>();
+        DependencyManager::set<EntityScriptingInterface>(true);
+        DependencyManager::set<GraphicsScriptingInterface>();
+        DependencyManager::registerInheritance<scriptable::ModelProviderFactory, ApplicationMeshProvider>();
+        DependencyManager::set<ApplicationMeshProvider>();
+        DependencyManager::set<RecordingScriptingInterface>();
+        DependencyManager::set<WindowScriptingInterface>();
+        DependencyManager::set<HMDScriptingInterface>();
+        DependencyManager::set<ResourceScriptingInterface>();
+        DependencyManager::set<TabletScriptingInterface>();
+        DependencyManager::set<InputConfiguration>();
+        DependencyManager::set<ToolbarScriptingInterface>();
+        DependencyManager::set<UserActivityLoggerScriptingInterface>();
+        DependencyManager::set<AssetMappingsScriptingInterface>();
+        DependencyManager::set<DomainConnectionModel>();
 
 #if defined(Q_OS_MAC) || defined(Q_OS_WIN)
-    DependencyManager::set<SpeechRecognizer>();
+        DependencyManager::set<SpeechRecognizer>();
 #endif
-    DependencyManager::set<DiscoverabilityManager>();
-    DependencyManager::set<SceneScriptingInterface>();
-    DependencyManager::set<OffscreenUi>();
-    DependencyManager::set<AutoUpdater>();
-    DependencyManager::set<Midi>();
-    DependencyManager::set<PathUtils>();
-    DependencyManager::set<InterfaceDynamicFactory>();
-    DependencyManager::set<AudioInjectorManager>();
-    DependencyManager::set<MessagesClient>();
-    controller::StateController::setStateVariables({ { STATE_IN_HMD, STATE_CAMERA_FULL_SCREEN_MIRROR,
-                    STATE_CAMERA_FIRST_PERSON, STATE_CAMERA_THIRD_PERSON, STATE_CAMERA_ENTITY, STATE_CAMERA_INDEPENDENT,
-                    STATE_SNAP_TURN, STATE_ADVANCED_MOVEMENT_CONTROLS, STATE_GROUNDED, STATE_NAV_FOCUSED } });
-    DependencyManager::set<UserInputMapper>();
-    DependencyManager::set<controller::ScriptingInterface, ControllerScriptingInterface>();
-    DependencyManager::set<InterfaceParentFinder>();
-    DependencyManager::set<EntityTreeRenderer>(true, qApp, qApp);
-    DependencyManager::set<CompositorHelper>();
-    DependencyManager::set<OffscreenQmlSurfaceCache>();
-    DependencyManager::set<EntityScriptClient>();
-    DependencyManager::set<EntityScriptServerLogClient>();
-    DependencyManager::set<LimitlessVoiceRecognitionScriptingInterface>();
-    DependencyManager::set<GooglePolyScriptingInterface>();
-    DependencyManager::set<OctreeStatsProvider>(nullptr, qApp->getOcteeSceneStats());
-    DependencyManager::set<AvatarBookmarks>();
-    DependencyManager::set<LocationBookmarks>();
-    DependencyManager::set<Snapshot>();
-    DependencyManager::set<CloseEventSender>();
-    DependencyManager::set<ResourceManager>();
-    DependencyManager::set<SelectionScriptingInterface>();
-    DependencyManager::set<Ledger>();
-    DependencyManager::set<Wallet>();
-    DependencyManager::set<WalletScriptingInterface>();
+        DependencyManager::set<DiscoverabilityManager>();
+        DependencyManager::set<SceneScriptingInterface>();
+        DependencyManager::set<OffscreenUi>();
+        DependencyManager::set<AutoUpdater>();
+        DependencyManager::set<Midi>();
+        DependencyManager::set<PathUtils>();
+        DependencyManager::set<InterfaceDynamicFactory>();
+        DependencyManager::set<AudioInjectorManager>();
+        DependencyManager::set<MessagesClient>();
+        controller::StateController::setStateVariables({ { STATE_IN_HMD, STATE_CAMERA_FULL_SCREEN_MIRROR,
+                        STATE_CAMERA_FIRST_PERSON, STATE_CAMERA_THIRD_PERSON, STATE_CAMERA_ENTITY, STATE_CAMERA_INDEPENDENT,
+                        STATE_SNAP_TURN, STATE_ADVANCED_MOVEMENT_CONTROLS, STATE_GROUNDED, STATE_NAV_FOCUSED } });
+        DependencyManager::set<UserInputMapper>();
+        DependencyManager::set<controller::ScriptingInterface, ControllerScriptingInterface>();
+        DependencyManager::set<InterfaceParentFinder>();
+        DependencyManager::set<EntityTreeRenderer>(true, qApp, qApp);
+        DependencyManager::set<CompositorHelper>();
+        DependencyManager::set<OffscreenQmlSurfaceCache>();
+        DependencyManager::set<EntityScriptClient>();
+        DependencyManager::set<EntityScriptServerLogClient>();
+        DependencyManager::set<LimitlessVoiceRecognitionScriptingInterface>();
+        DependencyManager::set<GooglePolyScriptingInterface>();
+        DependencyManager::set<OctreeStatsProvider>(nullptr, qApp->getOcteeSceneStats());
+        DependencyManager::set<AvatarBookmarks>();
+        DependencyManager::set<LocationBookmarks>();
+        DependencyManager::set<Snapshot>();
+        DependencyManager::set<CloseEventSender>();
+        DependencyManager::set<ResourceManager>();
+        DependencyManager::set<SelectionScriptingInterface>();
+        DependencyManager::set<Ledger>();
+        DependencyManager::set<Wallet>();
+        DependencyManager::set<WalletScriptingInterface>();
 
-    DependencyManager::set<FadeEffect>();
+        DependencyManager::set<FadeEffect>();
 
+    }
+    PROFILE_SYNC_BEGIN(startup, "App::App() members", "");
     return previousSessionCrashed;
 }
 
@@ -954,6 +958,8 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer, bo
     _sampleSound(nullptr)
 
 {
+    PROFILE_SYNC_END(startup, "App::App() members", "");
+    PROFILE_RANGE(startup, "App::App() body");
 
     auto steamClient = PluginManager::getInstance()->getSteamClientPlugin();
     setProperty(hifi::properties::STEAM, (steamClient && steamClient->isRunning()));
@@ -2427,6 +2433,7 @@ Application::~Application() {
 }
 
 void Application::initializeGL() {
+    PROFILE_RANGE(startup, "initializeGL");
     qCDebug(interfaceapp) << "Created Display Window.";
 
     // initialize glut for shape drawing; Qt apparently initializes it on OS X
@@ -2481,18 +2488,36 @@ void Application::initializeGL() {
 
     // FIXME: on low end systems os the shaders take up to 1 minute to compile, so we pause the deadlock watchdog thread.
     DeadlockWatchdogThread::withPause([&] {
+        PROFILE_RANGE(startup, "Engine load");
         // Set up the render engine
         render::CullFunctor cullFunctor = LODManager::shouldRender;
-        _renderEngine->addJob<UpdateSceneTask>("UpdateScene");
+        {
+            PROFILE_RANGE(startup, "UpdateSceneTask");
+            _renderEngine->addJob<UpdateSceneTask>("UpdateScene");
+        }
 #ifndef Q_OS_ANDROID
-        _renderEngine->addJob<SecondaryCameraRenderTask>("SecondaryCameraJob", cullFunctor, !DISABLE_DEFERRED);
+        {
+            PROFILE_RANGE(startup, "SecondaryCameraJob");
+            _renderEngine->addJob<SecondaryCameraRenderTask>("SecondaryCameraJob", cullFunctor, !DISABLE_DEFERRED);
+        }
 #endif
-        _renderEngine->addJob<RenderViewTask>("RenderMainView", cullFunctor, !DISABLE_DEFERRED, render::ItemKey::TAG_BITS_0, render::ItemKey::TAG_BITS_0);
-        _renderEngine->load();
-        _renderEngine->registerScene(_main3DScene);
-
-        // Now that OpenGL is initialized, we are sure we have a valid context and can create the various pipeline shaders with success.
-        DependencyManager::get<GeometryCache>()->initializeShapePipelines();
+        {
+            PROFILE_RANGE(startup, "RenderViewTask");
+            _renderEngine->addJob<RenderViewTask>("RenderMainView", cullFunctor, !DISABLE_DEFERRED, render::ItemKey::TAG_BITS_0, render::ItemKey::TAG_BITS_0);
+        }
+        {
+            PROFILE_RANGE(startup, "load");
+            _renderEngine->load();
+        }
+        {
+            PROFILE_RANGE(startup, "registerScene");
+            _renderEngine->registerScene(_main3DScene);
+        }
+        {
+            PROFILE_RANGE(startup, "initializeShapePipelines");
+            // Now that OpenGL is initialized, we are sure we have a valid context and can create the various pipeline shaders with success.
+            DependencyManager::get<GeometryCache>()->initializeShapePipelines();
+        }
     });
 
     _offscreenContext = new OffscreenGLCanvas();
@@ -2535,13 +2560,17 @@ void Application::initializeGL() {
         qFatal("Unable to make offscreen context current");
     }
 
-    // update before the first render
-    update(0);
+    {
+        PROFILE_RANGE(startup, "Update(0)");
+        // update before the first render
+        update(0);
+    }
 }
 
 extern void setupPreferences();
 
 void Application::initializeUi() {
+    PROFILE_RANGE(startup, "initializeUI");
     // Make sure all QML surfaces share the main thread GL context
     OffscreenQmlSurface::setSharedContext(_offscreenContext->getContext());
     OffscreenQmlSurface::addWhitelistContextHandler(QUrl{ "OverlayWindowTest.qml" },
@@ -2591,6 +2620,7 @@ void Application::initializeUi() {
     qmlRegisterType<WebBrowserSuggestionsEngine>("HifiWeb", 1, 0, "WebBrowserSuggestionsEngine");
 
     {
+        PROFILE_RANGE(startup, "getTablet");
         auto tabletScriptingInterface = DependencyManager::get<TabletScriptingInterface>();
         tabletScriptingInterface->getTablet(SYSTEM_TABLET);
     }
@@ -2605,13 +2635,17 @@ void Application::initializeUi() {
     // OffscreenUi is a subclass of OffscreenQmlSurface specifically designed to
     // support the window management and scripting proxies for VR use
     DeadlockWatchdogThread::withPause([&] {
+        PROFILE_RANGE(startup, "createDesktop");
         offscreenUi->createDesktop(PathUtils::qmlUrl("hifi/Desktop.qml"));
     });
     // FIXME either expose so that dialogs can set this themselves or
     // do better detection in the offscreen UI of what has focus
     offscreenUi->setNavigationFocused(false);
 
-    setupPreferences();
+    {
+        PROFILE_RANGE(startup, "setupPreferences");
+        setupPreferences();
+    }
 
     _glWidget->installEventFilter(offscreenUi.data());
     offscreenUi->setMouseTranslator([=](const QPointF& pt) {
@@ -2624,25 +2658,32 @@ void Application::initializeUi() {
         }
         return result.toPoint();
     });
-    offscreenUi->resume();
+
+    {
+        PROFILE_RANGE(startup, "resume");
+        offscreenUi->resume();
+    }
     connect(_window, &MainWindow::windowGeometryChanged, [this](const QRect& r){
         resizeGL();
     });
 
     // This will set up the input plugins UI
     _activeInputPlugins.clear();
-    foreach(auto inputPlugin, PluginManager::getInstance()->getInputPlugins()) {
-        if (KeyboardMouseDevice::NAME == inputPlugin->getName()) {
-            _keyboardMouseDevice = std::dynamic_pointer_cast<KeyboardMouseDevice>(inputPlugin);
-        }
-        if (TouchscreenDevice::NAME == inputPlugin->getName()) {
-            _touchscreenDevice = std::dynamic_pointer_cast<TouchscreenDevice>(inputPlugin);
-        }
-        if (TouchscreenVirtualPadDevice::NAME == inputPlugin->getName()) {
-            _touchscreenVirtualPadDevice = std::dynamic_pointer_cast<TouchscreenVirtualPadDevice>(inputPlugin);
+
+    {
+        PROFILE_RANGE(startup, "inputPlugins");
+        foreach(auto inputPlugin, PluginManager::getInstance()->getInputPlugins()) {
+            if (KeyboardMouseDevice::NAME == inputPlugin->getName()) {
+                _keyboardMouseDevice = std::dynamic_pointer_cast<KeyboardMouseDevice>(inputPlugin);
+            }
+            if (TouchscreenDevice::NAME == inputPlugin->getName()) {
+                _touchscreenDevice = std::dynamic_pointer_cast<TouchscreenDevice>(inputPlugin);
+            }
+            if (TouchscreenVirtualPadDevice::NAME == inputPlugin->getName()) {
+                _touchscreenVirtualPadDevice = std::dynamic_pointer_cast<TouchscreenVirtualPadDevice>(inputPlugin);
+            }
         }
     }
-
     auto compositorHelper = DependencyManager::get<CompositorHelper>();
     connect(compositorHelper.data(), &CompositorHelper::allowMouseCaptureChanged, this, [=] {
         if (isHMDMode()) {
@@ -2652,10 +2693,13 @@ void Application::initializeUi() {
         }
     });
 
-    // Pre-create a couple of Web3D overlays to speed up tablet UI
-    auto offscreenSurfaceCache = DependencyManager::get<OffscreenQmlSurfaceCache>();
-    offscreenSurfaceCache->reserve(TabletScriptingInterface::QML, 1);
-    offscreenSurfaceCache->reserve(Web3DOverlay::QML, 2);
+    {
+        PROFILE_RANGE(startup, "reserve");
+        // Pre-create a couple of Web3D overlays to speed up tablet UI
+        auto offscreenSurfaceCache = DependencyManager::get<OffscreenQmlSurfaceCache>();
+        offscreenSurfaceCache->reserve(TabletScriptingInterface::QML, 1);
+        offscreenSurfaceCache->reserve(Web3DOverlay::QML, 2);
+    }
 }
 
 
@@ -3260,6 +3304,7 @@ static void dumpEventQueue(QThread* thread) {
 #endif // DEBUG_EVENT_QUEUE
 
 bool Application::event(QEvent* event) {
+    PROFILE_RANGE(app, "event")
 
     if (!Menu::getInstance()) {
         return false;
@@ -4659,6 +4704,7 @@ void Application::initDisplay() {
 }
 
 void Application::init() {
+    PROFILE_RANGE(startup, "init");
 
     // Make sure Login state is up to date
     DependencyManager::get<DialogsManager>()->toggleLoginDialog();

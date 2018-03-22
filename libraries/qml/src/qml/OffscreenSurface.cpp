@@ -27,6 +27,8 @@
 #include "impl/SharedObject.h"
 #include "impl/TextureCache.h"
 
+#include "Profile.h"
+
 using namespace hifi::qml;
 using namespace hifi::qml::impl;
 
@@ -272,6 +274,7 @@ void OffscreenSurface::loadInternal(const QUrl& qmlSource,
                                     bool createNewContext,
                                     QQuickItem* parent,
                                     const QmlContextObjectCallback& callback) {
+    PROFILE_RANGE(app, "loadInternal");
     if (QThread::currentThread() != thread()) {
         qFatal("Called load on a non-surface thread");
     }
@@ -279,6 +282,7 @@ void OffscreenSurface::loadInternal(const QUrl& qmlSource,
     QMetaObject::invokeMethod(qApp, "updateHeartbeat", Qt::DirectConnection);
 
     if (!getRootItem()) {
+        PROFILE_RANGE(app, "_sharedObject create");
         _sharedObject->create(this);
     }
 
@@ -292,7 +296,11 @@ void OffscreenSurface::loadInternal(const QUrl& qmlSource,
     }
 
     auto targetContext = contextForUrl(finalQmlSource, parent, createNewContext);
-    auto qmlComponent = new QQmlComponent(getSurfaceContext()->engine(), finalQmlSource, QQmlComponent::PreferSynchronous);
+    QQmlComponent* qmlComponent;
+    {
+        PROFILE_RANGE(app, "new QQmlComponent");
+        qmlComponent = new QQmlComponent(getSurfaceContext()->engine(), finalQmlSource, QQmlComponent::PreferSynchronous);
+    }
     if (qmlComponent->isLoading()) {
         connect(qmlComponent, &QQmlComponent::statusChanged, this,
                 [=](QQmlComponent::Status) { finishQmlLoad(qmlComponent, targetContext, parent, callback); });
@@ -306,6 +314,7 @@ void OffscreenSurface::finishQmlLoad(QQmlComponent* qmlComponent,
                                      QQmlContext* qmlContext,
                                      QQuickItem* parent,
                                      const QmlContextObjectCallback& callback) {
+    PROFILE_RANGE(app, "finishQmlLoad");
     disconnect(qmlComponent, &QQmlComponent::statusChanged, this, 0);
     if (qmlComponent->isError()) {
         for (const auto& error : qmlComponent->errors()) {

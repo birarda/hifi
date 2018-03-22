@@ -15,6 +15,7 @@
 #include "RenderForwardTask.h"
 
 void RenderViewTask::build(JobModel& task, const render::Varying& input, render::Varying& output, render::CullFunctor cullFunctor, bool isDeferred, uint8_t tagBits, uint8_t tagMask) {
+    PROFILE_RANGE(startup, "RenderViewTask::build");
    // auto items = input.get<Input>();
 
     // Warning : the cull functor passed to the shadow pass should only be testing for LOD culling. If frustum culling

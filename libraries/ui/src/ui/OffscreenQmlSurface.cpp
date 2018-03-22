@@ -224,6 +224,7 @@ void AudioHandler::run() {
 }
 
 void OffscreenQmlSurface::initializeEngine(QQmlEngine* engine) {
+    PROFILE_RANGE(startup, "initializeEngine");
     Parent::initializeEngine(engine);
     new QQmlFileSelector(engine);
     static std::once_flag once;
@@ -254,8 +255,14 @@ void OffscreenQmlSurface::initializeEngine(QQmlEngine* engine) {
         rootContext->setContextProperty("eventBridgeJavaScriptToInject", QVariant(javaScriptToInject));
     }
 #if !defined(Q_OS_ANDROID)
-    rootContext->setContextProperty("FileTypeProfile", new FileTypeProfile(rootContext));
-    rootContext->setContextProperty("HFWebEngineProfile", new HFWebEngineProfile(rootContext));
+    {
+        PROFILE_RANGE(startup, "FileTypeProfile");
+        rootContext->setContextProperty("FileTypeProfile", new FileTypeProfile(rootContext));
+    }
+    {
+        PROFILE_RANGE(startup, "HFWebEngineProfile");
+        rootContext->setContextProperty("HFWebEngineProfile", new HFWebEngineProfile(rootContext));
+    }
 #endif
     rootContext->setContextProperty("Paths", DependencyManager::get<PathUtils>().data());
     rootContext->setContextProperty("Tablet", DependencyManager::get<TabletScriptingInterface>().data());

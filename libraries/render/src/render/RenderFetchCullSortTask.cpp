@@ -18,6 +18,7 @@
 using namespace render;
 
 void RenderFetchCullSortTask::build(JobModel& task, const Varying& input, Varying& output, CullFunctor cullFunctor, uint8_t tagBits, uint8_t tagMask) {
+    PROFILE_RANGE(startup, "RenderFetchCullSortTask::build");
     cullFunctor = cullFunctor ? cullFunctor : [](const RenderArgs*, const AABox&){ return true; };
 
     // CPU jobs:
