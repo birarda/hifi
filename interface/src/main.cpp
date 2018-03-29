@@ -293,7 +293,10 @@ int main(int argc, const char* argv[]) {
         server.close();
 
         tracer->stopTracing();
-        tracer->serialize(QStandardPaths::writableLocation(QStandardPaths::DesktopLocation) + "/Traces/trace-startup.json.gz");
+        auto traceFile = QStandardPaths::writableLocation(QStandardPaths::DesktopLocation) + "/Traces/trace-startup.json.gz";
+        qDebug() << "Writing the trace to" << traceFile;
+        tracer->serialize(traceFile);
+        qDebug() << "File exists?" << QFile::exists(traceFile);
     }
 
     Application::shutdownPlugins();
