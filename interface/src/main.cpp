@@ -282,8 +282,8 @@ int main(int argc, const char* argv[]) {
         app.installTranslator(&translator);
         qCDebug(interfaceapp, "Created QT Application.");
 
-        auto traceFile = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/Traces/trace-startup.json.gz";
-        QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)).mkpath("Traces");
+        auto traceFile = QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + "/Traces/trace-startup.json.gz";
+        QDir(QStandardPaths::writableLocation(QStandardPaths::CacheLocation)).mkpath("Traces");
 
         QTimer exitTimer;
         exitTimer.setSingleShot(true);
