@@ -282,18 +282,21 @@ int main(int argc, const char* argv[]) {
         app.installTranslator(&translator);
         qCDebug(interfaceapp, "Created QT Application.");
 
+        auto traceFile = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/Traces/trace-startup.json.gz";
+        QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)).mkpath("Traces");
+
         QTimer exitTimer;
         exitTimer.setSingleShot(true);
         QObject::connect(&exitTimer, &QTimer::timeout, [&] {
             app.quit();
         });
-        exitTimer.start(2 * 1000);
+        exitTimer.start(60 * 1000);
         
         exitCode = app.exec();
         server.close();
 
         tracer->stopTracing();
-        auto traceFile = QStandardPaths::writableLocation(QStandardPaths::DesktopLocation) + "/Traces/trace-startup.json.gz";
+
         qDebug() << "Writing the trace to" << traceFile;
         tracer->serialize(traceFile);
         qDebug() << "File exists?" << QFile::exists(traceFile);
