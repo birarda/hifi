@@ -11,6 +11,8 @@
 
 #include "TextureCache.h"
 
+#include <PortableHighResolutionClock.h>
+#include <chrono>
 #include <mutex>
 
 #include <QtConcurrent/QtConcurrentRun>
@@ -998,7 +1000,9 @@ void ImageReader::listSupportedImageFormats() {
 }
 
 void ImageReader::run() {
+
     PROFILE_RANGE_EX(resource_parse_image, __FUNCTION__, 0xffff0000, 0, { { "url", _url.toString() } });
+
     DependencyManager::get<StatTracker>()->decrementStat("PendingProcessing");
     CounterStat counter("Processing");
 
@@ -1009,7 +1013,11 @@ void ImageReader::run() {
     QThread::currentThread()->setPriority(QThread::LowPriority);
     Finally restorePriority([originalPriority] { QThread::currentThread()->setPriority(originalPriority); });
 
+    auto before = p_high_resolution_clock::now();
     read();
+    auto after = p_high_resolution_clock::now();
+
+    qDebug() << "texture processing for" << _url << "took" << std::chrono::duration_cast<std::chrono::microseconds>(after - before).count();
 }
 
 void ImageReader::read() {
