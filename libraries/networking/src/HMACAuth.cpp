@@ -9,10 +9,14 @@
 //  See the accompanying file LICENSE or http://www.apache.org/licenses/LICENSE-2.0.html
 //
 
+#include "HMACAuth.h"
+
+#include <cassert>
+
 #include <openssl/opensslv.h>
 #include <openssl/hmac.h>
 
-#include "HMACAuth.h"
+#include "NetworkLogging.h"
 
 #include <QUuid>
 
@@ -86,8 +90,16 @@ HMACAuth::HMACHash HMACAuth::result() {
     HMACHash hashValue(EVP_MAX_MD_SIZE);
     unsigned int  hashLen;
     QMutexLocker lock(&_lock);
-    HMAC_Final(_hmacContext, &hashValue[0], &hashLen);
-    hashValue.resize((size_t) hashLen);
+    auto hmacResult = HMAC_Final(_hmacContext, &hashValue[0], &hashLen);
+
+    if (hmacResult) {
+        hashValue.resize((size_t) hashLen);
+    } else {
+        // the HMAC_FINAL call failed - should not be possible to get into this state
+        qCWarning(networking) << "Error occured calling HMAC_Final";
+        assert(hmacResult);
+    }
+
     // Clear state for possible reuse.
     HMAC_Init_ex(_hmacContext, nullptr, 0, nullptr, nullptr);
     return hashValue;
