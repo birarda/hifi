@@ -44,41 +44,54 @@ HMACAuth::~HMACAuth() {
 }
 #endif
 
+const EVP_MD* hashFunctionForAuthMethod(HMACAuth::AuthMethod authMethod) {
+
+    switch (authMethod) {
+        case HMACAuth::MD5:
+            return EVP_md5();
+
+        case HMACAuth::SHA1:
+            return EVP_sha1();
+
+        case HMACAuth::SHA224:
+            return EVP_sha224();
+
+        case HMACAuth::SHA256:
+            return EVP_sha256();
+
+        case HMACAuth::RIPEMD160:
+            return EVP_ripemd160();
+
+        default:
+            return nullptr;
+    }
+}
+
 bool HMACAuth::setKey(const char* keyValue, int keyLen) {
-    const EVP_MD* sslStruct = nullptr;
-
-    switch (_authMethod) {
-    case MD5:
-        sslStruct = EVP_md5();
-        break;
-
-    case SHA1:
-        sslStruct = EVP_sha1();
-        break;
-
-    case SHA224:
-        sslStruct = EVP_sha224();
-        break;
-
-    case SHA256:
-        sslStruct = EVP_sha256();
-        break;
-
-    case RIPEMD160:
-        sslStruct = EVP_ripemd160();
-        break;
-
-    default:
+    const EVP_MD* sslStruct = hashFunctionForAuthMethod(_authMethod);
+    if (sslStruct) {
+        QMutexLocker lock(&_lock);
+        return (bool) HMAC_Init_ex(_hmacContext, keyValue, keyLen, sslStruct, nullptr);
+    } else {
         return false;
     }
-
-    QMutexLocker lock(&_lock);
-    return (bool) HMAC_Init_ex(_hmacContext, keyValue, keyLen, sslStruct, nullptr);
 }
 
 bool HMACAuth::setKey(const QUuid& uidKey) {
     const QByteArray rfcBytes(uidKey.toRfc4122());
     return setKey(rfcBytes.constData(), rfcBytes.length());
+}
+
+bool HMACAuth::reset() {
+    const EVP_MD* sslStruct = hashFunctionForAuthMethod(_authMethod);
+    if (sslStruct) {
+        QMutexLocker lock(&_lock);
+        // call HMAC_Init_ex with a null key (keeping it unchanged)
+        // and our current EVP_MD, forcing an internal state reset
+        return (bool) HMAC_Init_ex(_hmacContext, nullptr, 0, sslStruct, nullptr);
+    } else {
+        return false;
+    }
 }
 
 bool HMACAuth::addData(const char* data, int dataLen) {
@@ -101,6 +114,6 @@ HMACAuth::HMACHash HMACAuth::result() {
     }
 
     // Clear state for possible reuse.
-    HMAC_Init_ex(_hmacContext, nullptr, 0, nullptr, nullptr);
+    reset();
     return hashValue;
 }
