@@ -412,10 +412,6 @@ void Socket::readPendingDatagrams() {
                     qDebug() << "DL Packet:" << QByteArray(packet->getPayload(), packet->getPayloadSize()).toHex();
                 }
 
-                if (type == PacketType::AvatarData) {
-                    qDebug() << "AD Packet:" << QByteArray(packet->getPayload(), packet->getPayloadSize()).toHex();
-                }
-
                 if (packet->isPartOfMessage()) {
                     auto connection = findOrCreateConnection(senderSockAddr);
                     if (connection) {
