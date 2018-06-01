@@ -784,6 +784,7 @@ const unsigned char* unpackFauxJoint(const unsigned char* sourceBuffer, ThreadSa
             qCWarning(avatars) << "AvatarData packet too small, attempting to read " <<   \
                 #ITEM_NAME << ", only " << (endPosition - sourceBuffer) <<                \
                 " bytes left, " << getSessionUUID();                                      \
+            qCWarning(avatars) << "Hex:" << buffer.toHex();                               \
         }                                                                                 \
         return buffer.size();                                                             \
     }

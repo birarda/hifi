@@ -406,6 +406,12 @@ void Socket::readPendingDatagrams() {
                     }
                 }
 
+                // print all domain list packets
+                auto type = NLPacket::typeInHeader(*packet);
+                if (type == PacketType::DomainList) {
+                    qDebug() << "DL Packet:" << QByteArray(packet->getPayload(), packet->getPayloadSize()).toHex();
+                }
+
                 if (packet->isPartOfMessage()) {
                     auto connection = findOrCreateConnection(senderSockAddr);
                     if (connection) {
