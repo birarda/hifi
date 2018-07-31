@@ -206,9 +206,9 @@ void AvatarMixerSlave::broadcastAvatarDataToAgent(const SharedNodePointer& node)
         SortableAvatar() = delete;
         SortableAvatar(const AvatarSharedPointer& avatar, uint64_t lastEncodeTime)
             : _avatar(avatar), _lastEncodeTime(lastEncodeTime) {}
-        glm::vec3 getPosition() const override { return _avatar->getWorldPosition(); }
+        glm::vec3 getPosition() const override { return _avatar->getClientGlobalPosition(); }
         float getRadius() const override {
-            glm::vec3 nodeBoxHalfScale = (_avatar->getWorldPosition() - _avatar->getGlobalBoundingBoxCorner() * _avatar->getSensorToWorldScale());
+            glm::vec3 nodeBoxHalfScale = (_avatar->getClientGlobalPosition() - _avatar->getGlobalBoundingBoxCorner() * _avatar->getSensorToWorldScale());
             return glm::max(nodeBoxHalfScale.x, glm::max(nodeBoxHalfScale.y, nodeBoxHalfScale.z));
         }
         uint64_t getTimestamp() const override {
