@@ -822,38 +822,6 @@ void AvatarMixer::sendStatsPacket() {
     _processQueuedAvatarDataPacketsElapsedTime = 0;
     _processQueuedAvatarDataPacketsLockWaitElapsedTime = 0;
 
-    QJsonObject avatarsObject;
-    auto nodeList = DependencyManager::get<NodeList>();
-    // add stats for each listerner
-    nodeList->eachNode([&](const SharedNodePointer& node) {
-        QJsonObject avatarStats;
-
-        const QString NODE_OUTBOUND_KBPS_STAT_KEY = "outbound_kbps";
-        const QString NODE_INBOUND_KBPS_STAT_KEY = "inbound_kbps";
-
-        // add the key to ask the domain-server for a username replacement, if it has it
-        avatarStats[USERNAME_UUID_REPLACEMENT_STATS_KEY] = uuidStringWithoutCurlyBraces(node->getUUID());
-
-        avatarStats[NODE_OUTBOUND_KBPS_STAT_KEY] = node->getOutboundBandwidth();
-        avatarStats[NODE_INBOUND_KBPS_STAT_KEY] = node->getInboundBandwidth();
-
-        AvatarMixerClientData* clientData = static_cast<AvatarMixerClientData*>(node->getLinkedData());
-        if (clientData) {
-            MutexTryLocker lock(clientData->getMutex());
-            if (lock.isLocked()) {
-                clientData->loadJSONStats(avatarStats);
-
-                // add the diff between the full outbound bandwidth and the measured bandwidth for AvatarData send only
-                avatarStats["delta_full_vs_avatar_data_kbps"] =
-                    avatarStats[NODE_OUTBOUND_KBPS_STAT_KEY].toDouble() - avatarStats[OUTBOUND_AVATAR_DATA_STATS_KEY].toDouble();
-            }
-        }
-
-        avatarsObject[uuidStringWithoutCurlyBraces(node->getUUID())] = avatarStats;
-    });
-
-    statsObject["z_avatars"] = avatarsObject;
-
     ThreadedAssignment::addPacketStatsAndSendStatsPacket(statsObject);
 
     _sumListeners = 0;
