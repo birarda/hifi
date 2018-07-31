@@ -904,11 +904,15 @@ void SpatiallyNestable::setLocalTransform(const Transform& transform) {
 }
 
 glm::vec3 SpatiallyNestable::getLocalPosition() const {
-    glm::vec3 result;
-    _transformLock.withReadLock([&] {
-        result = _transform.getTranslation();
-    });
-    return result;
+    if (_needsReadWriteLocks) {
+        glm::vec3 result;
+        _transformLock.withReadLock([&] {
+            result = _transform.getTranslation();
+        });
+        return result;
+    } else {
+        return _transform.getTranslation();
+    }
 }
 
 void SpatiallyNestable::setLocalPosition(const glm::vec3& position, bool tellPhysics) {
@@ -918,13 +922,22 @@ void SpatiallyNestable::setLocalPosition(const glm::vec3& position, bool tellPhy
         return;
     }
     bool changed = false;
-    _transformLock.withWriteLock([&] {
+    if (_needsReadWriteLocks) {
+        _transformLock.withWriteLock([&] {
+            if (_transform.getTranslation() != position) {
+                _transform.setTranslation(position);
+                changed = true;
+                _translationChanged = usecTimestampNow();
+            }
+        });
+    } else {
         if (_transform.getTranslation() != position) {
             _transform.setTranslation(position);
             changed = true;
             _translationChanged = usecTimestampNow();
         }
-    });
+    }
+
     if (changed) {
         locationChanged(tellPhysics);
     }
@@ -1028,18 +1041,32 @@ void SpatiallyNestable::setLocalSNScale(const glm::vec3& scale) {
 
 QList<SpatiallyNestablePointer> SpatiallyNestable::getChildren() const {
     QList<SpatiallyNestablePointer> children;
-    _childrenLock.withReadLock([&] {
+    if (_needsReadWriteLocks) {
+        _childrenLock.withReadLock([&] {
+            foreach(SpatiallyNestableWeakPointer childWP, _children.values()) {
+                SpatiallyNestablePointer child = childWP.lock();
+                // An object can set MyAvatar to be its parent using two IDs: the session ID and the special AVATAR_SELF_ID
+                // Because we only recognize an object as having one ID, we need to check for the second possible ID here.
+                // In practice, the AVATAR_SELF_ID should only be used for local-only objects.
+                if (child && child->_parentKnowsMe && (child->getParentID() == getID() ||
+                                                       (getNestableType() == NestableType::Avatar && child->getParentID() == AVATAR_SELF_ID))) {
+                    children << child;
+                }
+            }
+        });
+    } else {
         foreach(SpatiallyNestableWeakPointer childWP, _children.values()) {
             SpatiallyNestablePointer child = childWP.lock();
             // An object can set MyAvatar to be its parent using two IDs: the session ID and the special AVATAR_SELF_ID
             // Because we only recognize an object as having one ID, we need to check for the second possible ID here.
             // In practice, the AVATAR_SELF_ID should only be used for local-only objects.
             if (child && child->_parentKnowsMe && (child->getParentID() == getID() ||
-                    (getNestableType() == NestableType::Avatar && child->getParentID() == AVATAR_SELF_ID))) {
+                                                   (getNestableType() == NestableType::Avatar && child->getParentID() == AVATAR_SELF_ID))) {
                 children << child;
             }
         }
-    });
+    }
+
     return children;
 }
 

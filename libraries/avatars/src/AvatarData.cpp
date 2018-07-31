@@ -1656,10 +1656,8 @@ void AvatarData::processAvatarIdentity(const QByteArray& identityData, bool& ide
         }
 
         bool avatarEntityDataChanged = false;
-        _avatarEntitiesLock.withReadLock([&] {
-            avatarEntityDataChanged = (identity.avatarEntityData != _avatarEntityData);
-        });
-        
+        avatarEntityDataChanged = (identity.avatarEntityData != _avatarEntityData);
+
         if (avatarEntityDataChanged) {
             setAvatarEntityData(identity.avatarEntityData);
             identityChanged = true;
@@ -1693,18 +1691,15 @@ QByteArray AvatarData::identityByteArray(bool setIsReplicated) const {
     // when mixers send identity packets to agents, they simply forward along the last incoming sequence number they received
     // whereas agents send a fresh outgoing sequence number when identity data has changed
 
-    _avatarEntitiesLock.withReadLock([&] {
-        identityStream << getSessionUUID()
-            << (udt::SequenceNumber::Type) _identitySequenceNumber
-            << urlToSend
-            << _attachmentData
-            << _displayName
-            << getSessionDisplayNameForTransport() // depends on _sessionDisplayName
-            << (_isReplicated || setIsReplicated)
-            << _avatarEntityData
-            << _lookAtSnappingEnabled
-        ;
-    });
+    identityStream << getSessionUUID()
+        << (udt::SequenceNumber::Type) _identitySequenceNumber
+        << urlToSend
+        << _attachmentData
+        << _displayName
+        << getSessionDisplayNameForTransport() // depends on _sessionDisplayName
+        << (_isReplicated || setIsReplicated)
+        << _avatarEntityData
+        << _lookAtSnappingEnabled;
 
     return identityData;
 }
@@ -2509,21 +2504,19 @@ void AvatarData::setAvatarEntityData(const AvatarEntityMap& avatarEntityData) {
         qCDebug(avatars) << "discard suspect AvatarEntityData with size =" << avatarEntityData.size();
         return;
     }
-    _avatarEntitiesLock.withWriteLock([&] {
-        if (_avatarEntityData != avatarEntityData) {
-            // keep track of entities that were attached to this avatar but no longer are
-            AvatarEntityIDs previousAvatarEntityIDs = QSet<QUuid>::fromList(_avatarEntityData.keys());
+    if (_avatarEntityData != avatarEntityData) {
+        // keep track of entities that were attached to this avatar but no longer are
+        AvatarEntityIDs previousAvatarEntityIDs = QSet<QUuid>::fromList(_avatarEntityData.keys());
 
-            _avatarEntityData = avatarEntityData;
-            setAvatarEntityDataChanged(true);
+        _avatarEntityData = avatarEntityData;
+        setAvatarEntityDataChanged(true);
 
-            foreach (auto entityID, previousAvatarEntityIDs) {
-                if (!_avatarEntityData.contains(entityID)) {
-                    _avatarEntityDetached.insert(entityID);
-                }
+        foreach (auto entityID, previousAvatarEntityIDs) {
+            if (!_avatarEntityData.contains(entityID)) {
+                _avatarEntityDetached.insert(entityID);
             }
         }
-    });
+    }
 }
 
 AvatarEntityIDs AvatarData::getAndClearRecentlyDetachedIDs() {
