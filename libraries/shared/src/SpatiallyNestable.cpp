@@ -21,6 +21,8 @@
 const float defaultAACubeSize = 1.0f;
 const int MAX_PARENTING_CHAIN_SIZE = 30;
 
+bool SpatiallyNestable::_needsReadWriteLocks { false };
+
 SpatiallyNestable::SpatiallyNestable(NestableType nestableType, QUuid id) :
     _nestableType(nestableType),
     _id(id),
@@ -41,11 +43,15 @@ SpatiallyNestable::~SpatiallyNestable() {
 }
 
 const QUuid SpatiallyNestable::getID() const {
-    QUuid result;
-    _idLock.withReadLock([&] {
-        result = _id;
-    });
-    return result;
+    if (_needsReadWriteLocks) {
+        QUuid result;
+        _idLock.withReadLock([&] {
+            result = _id;
+        });
+        return result;
+    } else {
+        return _id;
+    }
 }
 
 void SpatiallyNestable::setID(const QUuid& id) {
@@ -53,26 +59,44 @@ void SpatiallyNestable::setID(const QUuid& id) {
     forEachChild([&](SpatiallyNestablePointer object) {
         object->setParentID(id);
     });
-    _idLock.withWriteLock([&] {
+
+    if (_needsReadWriteLocks) {
+        _idLock.withWriteLock([&] {
+            _id = id;
+        });
+    } else {
         _id = id;
-    });
+    }
+
 }
 
 const QUuid SpatiallyNestable::getParentID() const {
-    QUuid result;
-    _idLock.withReadLock([&] {
-        result = _parentID;
-    });
-    return result;
+    if (_needsReadWriteLocks) {
+        QUuid result;
+        _idLock.withReadLock([&] {
+            result = _parentID;
+        });
+        return result;
+    } else {
+        return _parentID;
+    }
+
 }
 
 void SpatiallyNestable::setParentID(const QUuid& parentID) {
-    _idLock.withWriteLock([&] {
+    if (_needsReadWriteLocks) {
+        _idLock.withWriteLock([&] {
+            if (_parentID != parentID) {
+                _parentID = parentID;
+                _parentKnowsMe = false;
+            }
+        });
+    } else {
         if (_parentID != parentID) {
             _parentID = parentID;
             _parentKnowsMe = false;
         }
-    });
+    }
 
     bool success = false;
     getParentPointer(success);
@@ -94,6 +118,7 @@ Transform SpatiallyNestable::getParentTransform(bool& success, int depth) const 
 }
 
 SpatiallyNestablePointer SpatiallyNestable::getParentPointer(bool& success) const {
+
     SpatiallyNestablePointer parent = _parent.lock();
     QUuid parentID = getParentID(); // used for its locking
 
@@ -906,11 +931,15 @@ void SpatiallyNestable::setLocalPosition(const glm::vec3& position, bool tellPhy
 }
 
 glm::quat SpatiallyNestable::getLocalOrientation() const {
-    glm::quat result;
-    _transformLock.withReadLock([&] {
-        result = _transform.getRotation();
-    });
-    return result;
+    if (_needsReadWriteLocks) {
+        glm::quat result;
+        _transformLock.withReadLock([&] {
+            result = _transform.getRotation();
+        });
+        return result;
+    } else {
+        return _transform.getRotation();
+    }
 }
 
 void SpatiallyNestable::setLocalOrientation(const glm::quat& orientation) {
@@ -920,13 +949,22 @@ void SpatiallyNestable::setLocalOrientation(const glm::quat& orientation) {
         return;
     }
     bool changed = false;
-    _transformLock.withWriteLock([&] {
+    if (_needsReadWriteLocks) {
+        _transformLock.withWriteLock([&] {
+            if (_transform.getRotation() != orientation) {
+                _transform.setRotation(orientation);
+                changed = true;
+                _rotationChanged = usecTimestampNow();
+            }
+        });
+    } else {
         if (_transform.getRotation() != orientation) {
             _transform.setRotation(orientation);
             changed = true;
             _rotationChanged = usecTimestampNow();
         }
-    });
+    }
+
     if (changed) {
         locationChanged();
     }

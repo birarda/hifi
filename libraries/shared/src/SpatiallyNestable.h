@@ -39,6 +39,9 @@ public:
     SpatiallyNestable(NestableType nestableType, QUuid id);
     virtual ~SpatiallyNestable();
 
+    static void disableReadWriteLocks() { SpatiallyNestable::_needsReadWriteLocks = false; }
+    static void enableReadWriteLocks() { SpatiallyNestable::_needsReadWriteLocks = true; }
+
     virtual const QUuid getID() const;
     virtual void setID(const QUuid& id);
 
@@ -245,6 +248,8 @@ private:
     mutable bool _parentKnowsMe { false };
     bool _isDead { false };
     bool _queryAACubeIsPuffed { false };
+
+    static bool _needsReadWriteLocks;
 };
 
 

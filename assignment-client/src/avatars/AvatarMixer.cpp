@@ -69,6 +69,15 @@ AvatarMixer::AvatarMixer(ReceivedMessage& message) :
             getOrCreateClientData(node);
         }
     });
+
+    // since the AvatarMixerSlave instances write to each AvatarData instances from one thread always at a different time
+    // than they read from each AvatarData instance from multiple threads, we disable the SpatiallyNestable read/write locks
+    SpatiallyNestable::disableReadWriteLocks();
+}
+
+void AvatarMixer::aboutToFinish() {
+    // re-enable the SpatiallyNestable read/write locks since we might become a different assignment type
+    SpatiallyNestable::enableReadWriteLocks();
 }
 
 SharedNodePointer addOrUpdateReplicatedNode(const QUuid& nodeID, const HifiSockAddr& senderSockAddr) {
