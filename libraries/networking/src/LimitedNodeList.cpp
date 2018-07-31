@@ -312,8 +312,6 @@ bool LimitedNodeList::packetSourceAndHashMatchAndTrackBandwidth(const udt::Packe
             SharedNodePointer matchingNode = nodeWithLocalID(sourceLocalID);
             sourceNode = matchingNode.data();
         }
-        
-        QUuid sourceID = sourceNode ? sourceNode->getUUID() : QUuid();
 
         if (!sourceNode &&
             !isDomainServer() &&
@@ -327,34 +325,6 @@ bool LimitedNodeList::packetSourceAndHashMatchAndTrackBandwidth(const udt::Packe
         }
 
         if (sourceNode) {
-            bool verifiedPacket = !PacketTypeEnum::getNonVerifiedPackets().contains(headerType);
-            bool ignoreVerification = isDomainServer() && PacketTypeEnum::getDomainIgnoredVerificationPackets().contains(headerType);
-
-            if (verifiedPacket && !ignoreVerification) {
-
-                QByteArray packetHeaderHash = NLPacket::verificationHashInHeader(packet);
-                QByteArray expectedHash;
-                auto sourceNodeHMACAuth = sourceNode->getAuthenticateHash();
-                if (sourceNode->getAuthenticateHash()) {
-                    expectedHash = NLPacket::hashForPacketAndHMAC(packet, *sourceNodeHMACAuth);
-                }
-
-                // check if the HMAC-md5 hash in the header matches the hash we would expect
-                if (!sourceNodeHMACAuth || packetHeaderHash != expectedHash) {
-                    static QMultiMap<QUuid, PacketType> hashDebugSuppressMap;
-
-                    if (!hashDebugSuppressMap.contains(sourceID, headerType)) {
-                        qCDebug(networking) << "Packet hash mismatch on" << headerType << "- Sender" << sourceID;
-                        qCDebug(networking) << "Packet len:" << packet.getDataSize() << "Expected hash:" <<
-                            expectedHash.toHex() << "Actual:" << packetHeaderHash.toHex();
-
-                        hashDebugSuppressMap.insert(sourceID, headerType);
-                    }
-
-                    return false;
-                }
-            }
-
             // No matter if this packet is handled or not, we update the timestamp for the last time we heard
             // from this sending node
             sourceNode->setLastHeardMicrostamp(usecTimestampNow());
