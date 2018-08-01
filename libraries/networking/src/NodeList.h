@@ -12,6 +12,7 @@
 #ifndef hifi_NodeList_h
 #define hifi_NodeList_h
 
+#include <chrono>
 #include <stdint.h>
 #include <iterator>
 #include <assert.h>
@@ -186,6 +187,8 @@ private:
 #if (PR_BUILD || DEV_BUILD)
     bool _shouldSendNewerVersion { false };
 #endif
+
+    std::chrono::high_resolution_clock::time_point _lastCheckIn;
 };
 
 #endif // hifi_NodeList_h

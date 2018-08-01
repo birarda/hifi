@@ -294,6 +294,13 @@ void NodeList::sendDomainServerCheckIn() {
         return;
     }
 
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - _lastCheckIn);
+    if (duration > std::chrono::milliseconds(1500)) {
+        qDebug() << "It has been" << duration.count() << "since the last DS check in";
+    }
+
+    _lastCheckIn = std::chrono::high_resolution_clock::now();
+
     if (_isShuttingDown) {
         qCDebug(networking) << "Refusing to send a domain-server check in while shutting down.";
         return;
