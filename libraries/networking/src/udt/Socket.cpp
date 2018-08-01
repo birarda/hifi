@@ -324,6 +324,8 @@ void Socket::checkForReadyReadBackup() {
 void Socket::readPendingDatagrams() {
     int packetSizeWithHeader = -1;
 
+    auto timeBefore = std::chrono::high_resolution_clock::now();
+
     while (_udpSocket.hasPendingDatagrams() && (packetSizeWithHeader = _udpSocket.pendingDatagramSize()) != -1) {
 
         // we're reading a packet so re-start the readyRead backup timer
@@ -417,6 +419,13 @@ void Socket::readPendingDatagrams() {
                 }
             }
         }
+    }
+
+    auto duration = std::chrono::high_resolution_clock::now() - timeBefore;
+
+    if (duration > std::chrono::seconds(1)) {
+        auto microsecondsElapsed = std::chrono::duration_cast<std::chrono::microseconds>(duration);
+        qDebug() << "readPendingDatagrams took" << microsecondsElapsed.count() << "microseconds";
     }
 }
 
