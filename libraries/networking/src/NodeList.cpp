@@ -295,9 +295,7 @@ void NodeList::sendDomainServerCheckIn() {
     }
 
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - _lastCheckIn);
-    if (duration > std::chrono::milliseconds(1500)) {
-        qDebug() << "It has been" << duration.count() << "since the last DS check in";
-    }
+    qDebug() << "It has been" << duration.count() << "since the last DS check in";
 
     _lastCheckIn = std::chrono::high_resolution_clock::now();
 
