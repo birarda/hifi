@@ -15,6 +15,8 @@
 #include <sys/socket.h>
 #endif
 
+#include <queue>
+
 #include <QtCore/QThread>
 
 #include <shared/QtHelpers.h>
@@ -326,11 +328,13 @@ void Socket::readPendingDatagrams() {
 
     auto timeBefore = std::chrono::high_resolution_clock::now();
     int count = 0;
-    auto readDuration = std::chrono::microseconds(0);
+
+    using DatagramTuple = std::tuple<std::unique_ptr<char[]>, qint64, HifiSockAddr, p_high_resolution_clock::time_point>;
+    std::queue<DatagramTuple> pendingDatagrams;
+
+    auto readBefore = std::chrono::high_resolution_clock::now();
 
     while (_udpSocket.hasPendingDatagrams() && (packetSizeWithHeader = _udpSocket.pendingDatagramSize()) != -1) {
-        ++count;
-
         // we're reading a packet so re-start the readyRead backup timer
         _readyReadBackupTimer->start();
 
@@ -343,30 +347,42 @@ void Socket::readPendingDatagrams() {
         // setup a buffer to read the packet into
         auto buffer = std::unique_ptr<char[]>(new char[packetSizeWithHeader]);
 
-        auto readBefore = std::chrono::high_resolution_clock::now();
-
         // pull the datagram
         auto sizeRead = _udpSocket.readDatagram(buffer.get(), packetSizeWithHeader,
                                                 senderSockAddr.getAddressPointer(), senderSockAddr.getPortPointer());
 
-        readDuration += std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - readBefore);
+        if (sizeRead > 0) {
+            pendingDatagrams.push(std::make_tuple(std::move(buffer), sizeRead, senderSockAddr, receiveTime));
+        }
+    }
+
+    auto readDuration = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - readBefore);
+
+    if (readDuration > std::chrono::milliseconds(100)) {
+        qDebug() << "WARNING: It took" << readDuration.count() << "microseconds to pull packets";
+    }
+
+    while (pendingDatagrams.size() > 0) {
+        ++count;
+
+        auto datagramTuple = std::move(pendingDatagrams.front());
+        pendingDatagrams.pop();
+
+        auto buffer = std::move(std::get<0>(datagramTuple));
+        auto bufferSize = std::get<1>(datagramTuple);
+        auto senderSockAddr = std::get<2>(datagramTuple);
+        auto receiveTime = std::get<3>(datagramTuple);
 
         // save information for this packet, in case it is the one that sticks readyRead
-        _lastPacketSizeRead = sizeRead;
+        _lastPacketSizeRead = bufferSize;
         _lastPacketSockAddr = senderSockAddr;
-
-        if (sizeRead <= 0) {
-            // we either didn't pull anything for this packet or there was an error reading (this seems to trigger
-            // on windows even if there's not a packet available)
-            continue;
-        }
 
         auto it = _unfilteredHandlers.find(senderSockAddr);
 
         if (it != _unfilteredHandlers.end()) {
             // we have a registered unfiltered handler for this HifiSockAddr - call that and return
             if (it->second) {
-                auto basePacket = BasePacket::fromReceivedPacket(std::move(buffer), packetSizeWithHeader, senderSockAddr);
+                auto basePacket = BasePacket::fromReceivedPacket(std::move(buffer), bufferSize, senderSockAddr);
                 basePacket->setReceiveTime(receiveTime);
                 it->second(std::move(basePacket));
             }
@@ -379,7 +395,7 @@ void Socket::readPendingDatagrams() {
 
         if (isControlPacket) {
             // setup a control packet from the data we just read
-            auto controlPacket = ControlPacket::fromReceivedPacket(std::move(buffer), packetSizeWithHeader, senderSockAddr);
+            auto controlPacket = ControlPacket::fromReceivedPacket(std::move(buffer), bufferSize, senderSockAddr);
             controlPacket->setReceiveTime(receiveTime);
 
             // move this control packet to the matching connection, if there is one
@@ -391,7 +407,7 @@ void Socket::readPendingDatagrams() {
 
         } else {
             // setup a Packet from the data we just read
-            auto packet = Packet::fromReceivedPacket(std::move(buffer), packetSizeWithHeader, senderSockAddr);
+            auto packet = Packet::fromReceivedPacket(std::move(buffer), bufferSize, senderSockAddr);
             packet->setReceiveTime(receiveTime);
 
             // save the sequence number in case this is the packet that sticks readyRead
@@ -430,10 +446,10 @@ void Socket::readPendingDatagrams() {
 
     auto duration = std::chrono::high_resolution_clock::now() - timeBefore;
 
-    if (duration > std::chrono::seconds(1)) {
+    if (duration > std::chrono::milliseconds(100)) {
         auto microsecondsElapsed = std::chrono::duration_cast<std::chrono::microseconds>(duration);
 
-        qDebug() << "readPendingDatagrams took" << microsecondsElapsed.count() << "microseconds for" << count << "packets";
+        qDebug() << "WARNING: readPendingDatagrams took" << microsecondsElapsed.count() << "microseconds for" << count << "packets";
         qDebug() << "of that time, socket read was" << readDuration.count();
     }
 }
