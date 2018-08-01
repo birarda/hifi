@@ -326,6 +326,7 @@ void Socket::readPendingDatagrams() {
 
     auto timeBefore = std::chrono::high_resolution_clock::now();
     int count = 0;
+    auto readDuration = std::chrono::microseconds(0);
 
     while (_udpSocket.hasPendingDatagrams() && (packetSizeWithHeader = _udpSocket.pendingDatagramSize()) != -1) {
         ++count;
@@ -342,9 +343,13 @@ void Socket::readPendingDatagrams() {
         // setup a buffer to read the packet into
         auto buffer = std::unique_ptr<char[]>(new char[packetSizeWithHeader]);
 
+        auto readBefore = std::chrono::high_resolution_clock::now();
+
         // pull the datagram
         auto sizeRead = _udpSocket.readDatagram(buffer.get(), packetSizeWithHeader,
                                                 senderSockAddr.getAddressPointer(), senderSockAddr.getPortPointer());
+
+        readDuration += std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - readBefore);
 
         // save information for this packet, in case it is the one that sticks readyRead
         _lastPacketSizeRead = sizeRead;
@@ -427,7 +432,9 @@ void Socket::readPendingDatagrams() {
 
     if (duration > std::chrono::seconds(1)) {
         auto microsecondsElapsed = std::chrono::duration_cast<std::chrono::microseconds>(duration);
+
         qDebug() << "readPendingDatagrams took" << microsecondsElapsed.count() << "microseconds for" << count << "packets";
+        qDebug() << "of that time, socket read was" << readDuration.count();
     }
 }
 
