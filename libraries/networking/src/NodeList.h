@@ -189,6 +189,7 @@ private:
 #endif
 
     std::chrono::high_resolution_clock::time_point _lastCheckIn;
+    std::chrono::high_resolution_clock::time_point _lastListProcess;
 };
 
 #endif // hifi_NodeList_h
