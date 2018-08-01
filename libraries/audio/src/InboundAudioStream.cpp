@@ -208,7 +208,7 @@ int InboundAudioStream::parseData(ReceivedMessage& message) {
     int framesAvailable = _ringBuffer.framesAvailable();
     // if this stream was starved, check if we're still starved.
     if (_isStarved && framesAvailable >= _desiredJitterBufferFrames) {
-        qCInfo(audiostream, "Starve ended");
+//        qCInfo(audiostream, "Starve ended");
         _isStarved = false;
     }
     // if the ringbuffer exceeds the desired size by more than the threshold specified,
@@ -222,8 +222,8 @@ int InboundAudioStream::parseData(ReceivedMessage& message) {
 
         _oldFramesDropped += framesToDrop;
 
-        qCInfo(audiostream, "Dropped %d frames", framesToDrop);
-        qCInfo(audiostream, "Reset current jitter frames");
+//        qCInfo(audiostream, "Dropped %d frames", framesToDrop);
+//        qCInfo(audiostream, "Reset current jitter frames");
     }
 
     framesAvailableChanged();
@@ -310,8 +310,8 @@ int InboundAudioStream::writeDroppableSilentFrames(int silentFrames) {
         _currentJitterBufferFrames -= numSilentFramesToDrop;
         _silentFramesDropped += numSilentFramesToDrop;
 
-        qCInfo(audiostream, "Dropped %d silent frames", numSilentFramesToDrop);
-        qCInfo(audiostream, "Set current jitter frames to %d (dropped)", _currentJitterBufferFrames);
+//        qCInfo(audiostream, "Dropped %d silent frames", numSilentFramesToDrop);
+//        qCInfo(audiostream, "Set current jitter frames to %d (dropped)", _currentJitterBufferFrames);
 
         _framesAvailableStat.reset();
     }
@@ -371,7 +371,7 @@ void InboundAudioStream::framesAvailableChanged() {
 
     if (_framesAvailableStat.getElapsedUsecs() >= FRAMES_AVAILABLE_STAT_WINDOW_USECS) {
         _currentJitterBufferFrames = (int)ceil(_framesAvailableStat.getAverage());
-        qCInfo(audiostream, "Set current jitter frames to %d (changed)", _currentJitterBufferFrames);
+//        qCInfo(audiostream, "Set current jitter frames to %d (changed)", _currentJitterBufferFrames);
 
         _framesAvailableStat.reset();
     }
@@ -379,7 +379,7 @@ void InboundAudioStream::framesAvailableChanged() {
 
 void InboundAudioStream::setToStarved() {
     if (!_isStarved) {
-        qCInfo(audiostream, "Starved");
+//        qCInfo(audiostream, "Starved");
     }
 
     _consecutiveNotMixedCount = 0;
@@ -420,7 +420,7 @@ void InboundAudioStream::setToStarved() {
             // make sure _desiredJitterBufferFrames does not become lower here
             if (calculatedJitterBufferFrames >= _desiredJitterBufferFrames) {
                 _desiredJitterBufferFrames = calculatedJitterBufferFrames;
-                qCInfo(audiostream, "Set desired jitter frames to %d (starved)", _desiredJitterBufferFrames);
+//                qCInfo(audiostream, "Set desired jitter frames to %d (starved)", _desiredJitterBufferFrames);
             }
         }
     }
@@ -473,7 +473,7 @@ void InboundAudioStream::packetReceivedUpdateTimingStats() {
                                                          / (float)AudioConstants::NETWORK_FRAME_USECS);
                 if (calculatedJitterBufferFrames < _desiredJitterBufferFrames) {
                     _desiredJitterBufferFrames = calculatedJitterBufferFrames;
-                    qCInfo(audiostream, "Set desired jitter frames to %d (reduced)", _desiredJitterBufferFrames);
+//                    qCInfo(audiostream, "Set desired jitter frames to %d (reduced)", _desiredJitterBufferFrames);
                 }
                 _timeGapStatsForDesiredReduction.clearNewStatsAvailableFlag();
             }
