@@ -483,11 +483,11 @@ void AudioMixer::throttle(std::chrono::microseconds duration, int frame) {
 
     // target different mix and backoff ratios (they also have different backoff rates)
     // this is to prevent oscillation, and encourage throttling to find a steady state
-    const float TARGET = 0.9f;
+    const float TARGET = 0.99f;
     // on a "regular" machine with 100 avatars, this is the largest value where
     // - overthrottling can be recovered
     // - oscillations will not occur after the recovery
-    const float BACKOFF_TARGET = 0.7f;
+    const float BACKOFF_TARGET = 0.95f;
 
     // the mixer is known to struggle at about 80 on a "regular" machine
     // so throttle 2/80 the streams to ensure smooth audio (throttling is linear)
@@ -519,8 +519,6 @@ void AudioMixer::throttle(std::chrono::microseconds duration, int frame) {
                 << _throttlingRatio << "of streams";
         }
     }
-
-    _throttlingRatio = 0.0f;
 }
 
 int AudioMixer::prepareFrame(const SharedNodePointer& node, unsigned int frame) {
