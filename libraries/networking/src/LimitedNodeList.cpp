@@ -271,10 +271,6 @@ bool LimitedNodeList::packetSourceAndHashMatchAndTrackBandwidth(const udt::Packe
 
     PacketType headerType = NLPacket::typeInHeader(packet);
 
-    if (headerType == PacketType::DomainList) {
-        qDebug() << "Checking a domain list packet";
-    }
-
     if (PacketTypeEnum::getNonSourcedPackets().contains(headerType)) {
         if (PacketTypeEnum::getReplicatedPacketMapping().key(headerType) != PacketType::Unknown) {
             // this is a replicated packet type - make sure the socket that sent it to us matches

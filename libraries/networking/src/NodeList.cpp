@@ -618,7 +618,9 @@ void NodeList::processDomainServerList(QSharedPointer<ReceivedMessage> message) 
     }
 
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - _lastListProcess);
-    qDebug() << "It has been" << duration.count() << "since the last DS list process";
+    if (duration > std::chrono::seconds(1)) {
+        qDebug() << "It has been" << duration.count() << "since the last DS list process";
+    }
     _lastListProcess = std::chrono::high_resolution_clock::now();
 
     // this is a packet from the domain server, reset the count of un-replied check-ins
