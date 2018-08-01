@@ -519,6 +519,8 @@ void AudioMixer::throttle(std::chrono::microseconds duration, int frame) {
                 << _throttlingRatio << "of streams";
         }
     }
+
+    _throttlingRatio = 0.0f;
 }
 
 int AudioMixer::prepareFrame(const SharedNodePointer& node, unsigned int frame) {
