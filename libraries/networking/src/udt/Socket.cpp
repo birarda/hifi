@@ -358,10 +358,6 @@ void Socket::readPendingDatagrams() {
 
     auto readDuration = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - readBefore);
 
-    if (readDuration > std::chrono::milliseconds(100)) {
-        qDebug() << "WARNING: It took" << readDuration.count() << "microseconds to pull packets";
-    }
-
     while (pendingDatagrams.size() > 0) {
         ++count;
 
@@ -446,11 +442,11 @@ void Socket::readPendingDatagrams() {
 
     auto duration = std::chrono::high_resolution_clock::now() - timeBefore;
 
-    if (duration > std::chrono::milliseconds(100)) {
+    if (duration > std::chrono::milliseconds(500)) {
         auto microsecondsElapsed = std::chrono::duration_cast<std::chrono::microseconds>(duration);
 
         qDebug() << "WARNING: readPendingDatagrams took" << microsecondsElapsed.count() << "microseconds for" << count << "packets";
-        qDebug() << "of that time, socket read was" << readDuration.count();
+        qDebug() << "Of that time, socket read was" << readDuration.count();
     }
 }
 
