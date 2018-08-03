@@ -651,7 +651,7 @@ void AvatarMixer::handleKillAvatarPacket(QSharedPointer<ReceivedMessage> message
 void AvatarMixer::handleNodeIgnoreRequestPacket(QSharedPointer<ReceivedMessage> message, SharedNodePointer senderNode) {
     auto start = usecTimestampNow();
     auto nodeList = DependencyManager::get<NodeList>();
-    AvatarMixerClientData* nodeData = reinterpret_cast<AvatarMixerClientData*>(senderNode->getLinkedData());
+    AvatarMixerClientData* nodeData = getOrCreateClientData(senderNode);
     bool addToIgnore;
     message->readPrimitive(&addToIgnore);
     while (message->getBytesLeftToRead()) {
