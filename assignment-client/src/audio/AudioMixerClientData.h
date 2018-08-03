@@ -40,7 +40,7 @@ public:
     void processPackets();
 
     // locks the mutex to make a copy
-    AudioStreamVector getAudioStreams() { QReadLocker readLock { &_streamsLock }; return _audioStreams; }
+    AudioStreamVector& getAudioStreams() { return _audioStreams; }
     AvatarAudioStream* getAvatarAudioStream();
 
     // returns whether self (this data's node) should ignore node, memoized by frame
