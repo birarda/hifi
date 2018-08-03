@@ -669,7 +669,9 @@ void AvatarMixer::handleNodeIgnoreRequestPacket(QSharedPointer<ReceivedMessage> 
             // to the ignored if the ignorer unignores.
             auto ignoredNode = nodeList->nodeWithUUID(ignoredUUID);
             AvatarMixerClientData* ignoredNodeData = reinterpret_cast<AvatarMixerClientData*>(ignoredNode->getLinkedData());
-            ignoredNodeData->setLastBroadcastTime(senderNode->getUUID(), 0);
+            if (ignoredNodeData) {
+                ignoredNodeData->setLastBroadcastTime(senderNode->getUUID(), 0);
+            }
         }
 
         if (addToIgnore) {
