@@ -156,7 +156,7 @@ void AudioMixerClientData::optionallyReplicatePacket(ReceivedMessage& message, c
 
                     packet->write(message.getMessage());
                 }
-                
+
                 nodeList->sendUnreliablePacket(*packet, *downstreamNode);
             }
         });
