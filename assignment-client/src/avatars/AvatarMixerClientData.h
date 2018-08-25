@@ -48,6 +48,9 @@ public:
     const AvatarData* getConstAvatarData() const { return _avatar.get(); }
     AvatarSharedPointer getAvatarSharedPointer() const { return _avatar; }
 
+    bool isIgnoreRadiusEnabled() const { return _isIgnoreRadiusEnabled; }
+    void setIsIgnoreRadiusEnabled(bool enabled) { _isIgnoreRadiusEnabled = enabled; }
+
     uint16_t getLastBroadcastSequenceNumber(const QUuid& nodeUUID) const;
     void setLastBroadcastSequenceNumber(const QUuid& nodeUUID, uint16_t sequenceNumber)
         { _lastBroadcastSequenceNumbers[nodeUUID] = sequenceNumber; }
@@ -179,6 +182,8 @@ private:
 
     std::unordered_map<Node::LocalID, TraitsCheckTimestamp> _lastSentTraitsTimestamps;
     std::unordered_map<Node::LocalID, AvatarTraits::TraitVersions> _sentTraitVersions;
+
+    std::atomic_bool _isIgnoreRadiusEnabled { false };
 };
 
 #endif // hifi_AvatarMixerClientData_h
