@@ -364,7 +364,7 @@ void AvatarMixerSlave::broadcastAvatarDataToAgent(const SharedNodePointer& node)
         } else {
             // Check to see if the space bubble is enabled
             // Don't bother with these checks if the other avatar has their bubble enabled and we're gettingAnyIgnored
-            if (node->isIgnoreRadiusEnabled() || (avatarNode->isIgnoreRadiusEnabled() && !getsAnyIgnored)) {
+            if (nodeData->isIgnoreRadiusEnabled() || (avatarNodeData->isIgnoreRadiusEnabled() && !getsAnyIgnored)) {
                 float sensorToWorldScale = avatarNodeData->getAvatarSharedPointer()->getSensorToWorldScale();
                 // Define the scale of the box for the current other node
                 glm::vec3 otherNodeBoxScale = (avatarNodeData->getPosition() - avatarNodeData->getGlobalBoundingBoxCorner()) * 2.0f * sensorToWorldScale;
