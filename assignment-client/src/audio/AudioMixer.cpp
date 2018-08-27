@@ -396,6 +396,18 @@ void AudioMixer::start() {
 
         auto frameTimer = _frameTiming.timer();
 
+        // process (node-isolated) audio packets across slave threads
+        {
+            auto packetsTimer = _packetsTiming.timer();
+
+            // first clear the concurrent vector of added streams that the slaves will add to when they process packets
+            _workerSharedData.addedStreams.clear();
+
+            nodeList->nestedEach([&](NodeList::const_iterator cbegin, NodeList::const_iterator cend) {
+                _slavePool.processPackets(cbegin, cend);
+            });
+        }
+
         nodeList->nestedEach([&](NodeList::const_iterator cbegin, NodeList::const_iterator cend) {
             // prepare frames; pop off any new audio from their streams
             {
@@ -425,16 +437,12 @@ void AudioMixer::start() {
         {
             auto eventsTimer = _eventsTiming.timer();
 
+            // clear removed nodes and removed streams before we process events that will setup the new set
+            _workerSharedData.removedNodes.clear();
+            _workerSharedData.removedStreams.clear();
+
             // since we're a while loop we need to yield to qt's event processing
             QCoreApplication::processEvents();
-
-            // process (node-isolated) audio packets across slave threads
-            {
-                nodeList->nestedEach([&](NodeList::const_iterator cbegin, NodeList::const_iterator cend) {
-                    auto packetsTimer = _packetsTiming.timer();
-                    _slavePool.processPackets(cbegin, cend);
-                });
-            }
         }
 
         if (_isFinished) {

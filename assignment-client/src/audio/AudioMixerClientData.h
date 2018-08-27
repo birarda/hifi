@@ -32,6 +32,17 @@
 class AudioMixerClientData : public NodeData {
     Q_OBJECT
 public:
+    struct AddedStream {
+        NodeIDStreamID nodeIDStreamID;
+        PositionalAudioStream* positionalStream;
+
+        AddedStream(QUuid nodeID, Node::LocalID localNodeID,
+                    StreamID streamID, PositionalAudioStream* positionalStream) :
+            nodeIDStreamID(nodeID, localNodeID, streamID), positionalStream(positionalStream) {};
+    };
+
+    using ConcurrentAddedStreams = tbb::concurrent_vector<AddedStream>;
+
     AudioMixerClientData(const QUuid& nodeID, Node::LocalID nodeLocalID);
     ~AudioMixerClientData();
 
@@ -39,7 +50,7 @@ public:
     using AudioStreamVector = std::vector<SharedStreamPointer>;
 
     void queuePacket(QSharedPointer<ReceivedMessage> packet, SharedNodePointer node);
-    void processPackets();
+    void processPackets(ConcurrentAddedStreams& addedStreams);
 
     AudioStreamVector& getAudioStreams() { return _audioStreams; }
     AvatarAudioStream* getAvatarAudioStream();
@@ -48,6 +59,7 @@ public:
 
     // packet parsers
     int parseData(ReceivedMessage& message) override;
+    void processStreamPacket(ReceivedMessage& message, ConcurrentAddedStreams& addedStreams);
     void negotiateAudioFormat(ReceivedMessage& message, const SharedNodePointer& node);
     void parseRequestsDomainListData(ReceivedMessage& message);
     void parsePerAvatarGainSet(ReceivedMessage& message, const SharedNodePointer& node);
@@ -177,6 +189,8 @@ private:
 
     bool _shouldMuteClient { false };
     bool _requestsDomainListData { false };
+
+    std::vector<AddedStream> _newAddedStreams;
 
     Node::IgnoredNodeIDs _newIgnoredNodeIDs;
     Node::IgnoredNodeIDs _newUnignoredNodeIDs;
