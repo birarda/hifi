@@ -55,7 +55,7 @@ void AudioMixerClientData::queuePacket(QSharedPointer<ReceivedMessage> message, 
     _packetQueue.push(message);
 }
 
-void AudioMixerClientData::processPackets() {
+void AudioMixerClientData::processPackets(ConcurrentAddedStreams& addedStreams) {
     SharedNodePointer node = _packetQueue.node;
     assert(_packetQueue.empty() || node);
     _packetQueue.node.clear();
@@ -68,22 +68,17 @@ void AudioMixerClientData::processPackets() {
             case PacketType::MicrophoneAudioWithEcho:
             case PacketType::InjectAudio:
             case PacketType::SilentAudioFrame: {
-
                 if (node->isUpstream()) {
                     setupCodecForReplicatedAgent(packet);
                 }
 
-                QMutexLocker lock(&getMutex());
-                parseData(*packet);
+                processStreamPacket(*packet, addedStreams);
 
                 optionallyReplicatePacket(*packet, *node);
-
                 break;
             }
             case PacketType::AudioStreamStats: {
-                QMutexLocker lock(&getMutex());
                 parseData(*packet);
-
                 break;
             }
             case PacketType::NegotiateAudioFormat:
@@ -313,119 +308,127 @@ int AudioMixerClientData::parseData(ReceivedMessage& message) {
         message.readPrimitive(&_downstreamAudioStreamStats);
 
         return message.getPosition();
+    }
 
-    } else {
-        SharedStreamPointer matchingStream;
+    return 0;
+}
 
-        bool isMicStream = false;
+void AudioMixerClientData::processStreamPacket(ReceivedMessage& message, ConcurrentAddedStreams &addedStreams) {
+    SharedStreamPointer matchingStream;
 
-        if (packetType == PacketType::MicrophoneAudioWithEcho
-            || packetType == PacketType::ReplicatedMicrophoneAudioWithEcho
-            || packetType == PacketType::MicrophoneAudioNoEcho
-            || packetType == PacketType::ReplicatedMicrophoneAudioNoEcho
-            || packetType == PacketType::SilentAudioFrame
-            || packetType == PacketType::ReplicatedSilentAudioFrame) {
+    auto packetType = message.getType();
+    bool newStream = false;
 
-            QWriteLocker writeLocker { &_streamsLock };
+    if (packetType == PacketType::MicrophoneAudioWithEcho
+        || packetType == PacketType::ReplicatedMicrophoneAudioWithEcho
+        || packetType == PacketType::MicrophoneAudioNoEcho
+        || packetType == PacketType::ReplicatedMicrophoneAudioNoEcho
+        || packetType == PacketType::SilentAudioFrame
+        || packetType == PacketType::ReplicatedSilentAudioFrame) {
 
-            auto micStreamIt = std::find_if(_audioStreams.begin(), _audioStreams.end(), [](const SharedStreamPointer& stream){
-                return stream->getStreamIdentifier().isNull();
-            });
-            if (micStreamIt == _audioStreams.end()) {
-                // we don't have a mic stream yet, so add it
+        QWriteLocker writeLocker { &_streamsLock };
 
-                // hop past the sequence number that leads the packet
-                message.seek(sizeof(quint16));
+        auto micStreamIt = std::find_if(_audioStreams.begin(), _audioStreams.end(), [](const SharedStreamPointer& stream){
+            return stream->getStreamIdentifier().isNull();
+        });
 
-                // pull the codec string from the packet
-                auto codecString = message.readString();
+        if (micStreamIt == _audioStreams.end()) {
+            // we don't have a mic stream yet, so add it
 
-                // determine if the stream is stereo or not
-                bool isStereo;
-                if (packetType == PacketType::SilentAudioFrame
-                    || packetType == PacketType::ReplicatedSilentAudioFrame) {
-                    quint16 numSilentSamples;
-                    message.readPrimitive(&numSilentSamples);
-                    isStereo = numSilentSamples == AudioConstants::NETWORK_FRAME_SAMPLES_STEREO;
-                } else {
-                    quint8 channelFlag;
-                    message.readPrimitive(&channelFlag);
-                    isStereo = channelFlag == 1;
-                }
-
-                auto avatarAudioStream = new AvatarAudioStream(isStereo, AudioMixer::getStaticJitterFrames());
-                avatarAudioStream->setupCodec(_codec, _selectedCodecName, isStereo ? AudioConstants::STEREO : AudioConstants::MONO);
-
-                if (_isIgnoreRadiusEnabled) {
-                    avatarAudioStream->enableIgnoreBox();
-                } else {
-                    avatarAudioStream->disableIgnoreBox();
-                }
-
-                qCDebug(audio) << "creating new AvatarAudioStream... codec:" << _selectedCodecName << "isStereo:" << isStereo;
-
-                connect(avatarAudioStream, &InboundAudioStream::mismatchedAudioCodec,
-                        this, &AudioMixerClientData::handleMismatchAudioFormat);
-
-                matchingStream = SharedStreamPointer(avatarAudioStream);
-                _audioStreams.push_back(matchingStream);
-            } else {
-                matchingStream = *micStreamIt;
-            }
-
-            writeLocker.unlock();
-
-            isMicStream = true;
-        } else if (packetType == PacketType::InjectAudio
-                   || packetType == PacketType::ReplicatedInjectAudio) {
-            // this is injected audio
-            // grab the stream identifier for this injected audio
+            // hop past the sequence number that leads the packet
             message.seek(sizeof(quint16));
 
-            QUuid streamIdentifier = QUuid::fromRfc4122(message.readWithoutCopy(NUM_BYTES_RFC4122_UUID));
+            // pull the codec string from the packet
+            auto codecString = message.readString();
 
+            // determine if the stream is stereo or not
             bool isStereo;
-            message.readPrimitive(&isStereo);
-
-            QWriteLocker writeLock { &_streamsLock };
-
-            auto streamIt = std::find_if(_audioStreams.begin(), _audioStreams.end(), [&streamIdentifier](const SharedStreamPointer& stream) {
-                return stream->getStreamIdentifier() == streamIdentifier;
-            });
-
-            if (streamIt == _audioStreams.end()) {
-                // we don't have this injected stream yet, so add it
-                auto injectorStream = new InjectedAudioStream(streamIdentifier, isStereo, AudioMixer::getStaticJitterFrames());
-
-#if INJECTORS_SUPPORT_CODECS
-                injectorStream->setupCodec(_codec, _selectedCodecName, isStereo ? AudioConstants::STEREO : AudioConstants::MONO);
-                qCDebug(audio) << "creating new injectorStream... codec:" << _selectedCodecName << "isStereo:" << isStereo;
-#endif
-
-                matchingStream = SharedStreamPointer(injectorStream);
-                _audioStreams.push_back(matchingStream);
+            if (packetType == PacketType::SilentAudioFrame || packetType == PacketType::ReplicatedSilentAudioFrame) {
+                quint16 numSilentSamples;
+                message.readPrimitive(&numSilentSamples);
+                isStereo = numSilentSamples == AudioConstants::NETWORK_FRAME_SAMPLES_STEREO;
             } else {
-                matchingStream = *streamIt;
+                quint8 channelFlag;
+                message.readPrimitive(&channelFlag);
+                isStereo = channelFlag == 1;
             }
 
-            writeLock.unlock();
+            auto avatarAudioStream = new AvatarAudioStream(isStereo, AudioMixer::getStaticJitterFrames());
+            avatarAudioStream->setupCodec(_codec, _selectedCodecName, isStereo ? AudioConstants::STEREO : AudioConstants::MONO);
+
+            if (_isIgnoreRadiusEnabled) {
+                avatarAudioStream->enableIgnoreBox();
+            } else {
+                avatarAudioStream->disableIgnoreBox();
+            }
+
+            qCDebug(audio) << "creating new AvatarAudioStream... codec:" << _selectedCodecName << "isStereo:" << isStereo;
+
+            connect(avatarAudioStream, &InboundAudioStream::mismatchedAudioCodec,
+                    this, &AudioMixerClientData::handleMismatchAudioFormat);
+
+            matchingStream = SharedStreamPointer(avatarAudioStream);
+            _audioStreams.push_back(matchingStream);
+
+            newStream = true;
+        } else {
+            matchingStream = *micStreamIt;
         }
 
-        // seek to the beginning of the packet so that the next reader is in the right spot
-        message.seek(0);
+        writeLocker.unlock();
+    } else if (packetType == PacketType::InjectAudio
+               || packetType == PacketType::ReplicatedInjectAudio) {
+        // this is injected audio
+        // grab the stream identifier for this injected audio
+        message.seek(sizeof(quint16));
 
-        // check the overflow count before we parse data
-        auto overflowBefore = matchingStream->getOverflowCount();
-        auto parseResult = matchingStream->parseData(message);
+        QUuid streamIdentifier = QUuid::fromRfc4122(message.readWithoutCopy(NUM_BYTES_RFC4122_UUID));
 
-        if (matchingStream->getOverflowCount() > overflowBefore) {
-            qCDebug(audio) << "Just overflowed on stream from" << message.getSourceID() << "at" << message.getSenderSockAddr();
-            qCDebug(audio) << "This stream is for" << (isMicStream ? "microphone audio" : "injected audio");
+        bool isStereo;
+        message.readPrimitive(&isStereo);
+
+        QWriteLocker writeLock { &_streamsLock };
+
+        auto streamIt = std::find_if(_audioStreams.begin(), _audioStreams.end(), [&streamIdentifier](const SharedStreamPointer& stream) {
+            return stream->getStreamIdentifier() == streamIdentifier;
+        });
+
+        if (streamIt == _audioStreams.end()) {
+            // we don't have this injected stream yet, so add it
+            auto injectorStream = new InjectedAudioStream(streamIdentifier, isStereo, AudioMixer::getStaticJitterFrames());
+
+#if INJECTORS_SUPPORT_CODECS
+            injectorStream->setupCodec(_codec, _selectedCodecName, isStereo ? AudioConstants::STEREO : AudioConstants::MONO);
+            qCDebug(audio) << "creating new injectorStream... codec:" << _selectedCodecName << "isStereo:" << isStereo;
+#endif
+
+            matchingStream = SharedStreamPointer(injectorStream);
+            _audioStreams.push_back(matchingStream);
+
+            newStream = true;
+        } else {
+            matchingStream = *streamIt;
         }
 
-        return parseResult;
+        writeLock.unlock();
     }
-    return 0;
+
+    // seek to the beginning of the packet so that the next reader is in the right spot
+    message.seek(0);
+
+    // check the overflow count before we parse data
+    auto overflowBefore = matchingStream->getOverflowCount();
+    matchingStream->parseData(message);
+
+    if (matchingStream->getOverflowCount() > overflowBefore) {
+        qCDebug(audio) << "Just overflowed on stream" << matchingStream->getStreamIdentifier()
+            << "from" << message.getSourceID();
+    }
+
+    if (newStream) {
+        // whenever a stream is added, push it to the concurrent vector of streams added this frame
+        addedStreams.emplace_back(getNodeID(), getNodeLocalID(), matchingStream->getStreamIdentifier(), matchingStream.get());
+    }
 }
 
 int AudioMixerClientData::checkBuffersBeforeFrameSend() {

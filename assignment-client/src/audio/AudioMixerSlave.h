@@ -12,6 +12,8 @@
 #ifndef hifi_AudioMixerSlave_h
 #define hifi_AudioMixerSlave_h
 
+#include <tbb/concurrent_vector.h>
+
 #include <AABox.h>
 #include <AudioHRTF.h>
 #include <AudioRingBuffer.h>
@@ -29,14 +31,9 @@ class AudioHRTF;
 class AudioMixerSlave {
 public:
     using ConstIter = NodeList::const_iterator;
-
-    struct AddedStream {
-        NodeIDStreamID nodeIDStreamID;
-        PositionalAudioStream* positionalStream;
-    };
     
     struct SharedData {
-        std::vector<AddedStream> addedStreams;
+        AudioMixerClientData::ConcurrentAddedStreams addedStreams;
         std::vector<Node::LocalID> removedNodes;
         std::vector<NodeIDStreamID> removedStreams;
     };
