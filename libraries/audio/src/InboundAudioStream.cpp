@@ -208,7 +208,6 @@ int InboundAudioStream::parseData(ReceivedMessage& message) {
     int framesAvailable = _ringBuffer.framesAvailable();
     // if this stream was starved, check if we're still starved.
     if (_isStarved && framesAvailable >= _desiredJitterBufferFrames) {
-        qCInfo(audiostream, "Starve ended");
         _isStarved = false;
     }
     // if the ringbuffer exceeds the desired size by more than the threshold specified,
@@ -378,10 +377,6 @@ void InboundAudioStream::framesAvailableChanged() {
 }
 
 void InboundAudioStream::setToStarved() {
-    if (!_isStarved) {
-        qCInfo(audiostream, "Starved");
-    }
-
     _consecutiveNotMixedCount = 0;
     _starveCount++;
     // if we have more than the desired frames when setToStarved() is called, then we'll immediately
