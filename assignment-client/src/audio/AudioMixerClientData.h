@@ -118,6 +118,7 @@ public:
         bool ignoredByListener { false };
         bool ignoringListener { false };
         bool completedSilentRender { false };
+        bool skippedStream { false };
 
         MixableStream(NodeIDStreamID nodeIDStreamID, PositionalAudioStream* positionalStream) :
             nodeStreamID(nodeIDStreamID), hrtf(new AudioHRTF), positionalStream(positionalStream) {};
