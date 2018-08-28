@@ -277,6 +277,10 @@ bool AudioMixerSlave::prepareMix(const SharedNodePointer& listener) {
 
         if (!isThrottling) {
             // we aren't throttling, so we already know that we can add this stream to the mix
+
+            // set the approximate volume of the stream to 1.0f
+            it->approximateVolume = 1.0f;
+
             addStream(*it, *listenerAudioStream, listenerData->getMasterAvatarGain(), false);
         } else {
             // we're throttling, so we need to update the approximate volume for this stream
@@ -344,13 +348,31 @@ void AudioMixerSlave::addStream(AudioMixerClientData::MixableStream& mixableStre
                                 float masterListenerGain, bool throttle) {
     ++stats.totalMixes;
 
-    // to reduce artifacts we call the HRTF functor for every source, even if throttled or silent
+    auto streamToAdd = mixableStream.positionalStream;
+
+    // to reduce artifacts we still call the HRTF functor for every silent or throttled source
+    // for the first frame where the source becomes throttled or silent
     // this ensures the correct tail from last mixed block and the correct spatialization of next first block
+    if (throttle || mixableStream.approximateVolume == 0.0f || streamToAdd->getLastPopOutputLoudness() == 0.0f) {
+        if (mixableStream.completedSilentRender) {
+
+            if (throttle) {
+                ++stats.hrtfThrottleRenders;
+            }
+
+            return;
+        } else {
+            mixableStream.completedSilentRender = true;
+        }
+    } else if (mixableStream.completedSilentRender) {
+        // a stream that is no longer throttled or silent should have its silent render flag reset to false
+        // so that we complete a silent render for the stream next time it is throttled or otherwise goes silent
+        mixableStream.completedSilentRender = false;
+    }
 
     // check if this is a server echo of a source back to itself
-    bool isEcho = (mixableStream.positionalStream == &listeningNodeStream);
+    bool isEcho = (streamToAdd == &listeningNodeStream);
 
-    auto streamToAdd = mixableStream.positionalStream;
     glm::vec3 relativePosition = streamToAdd->getPosition() - listeningNodeStream.getPosition();
 
     float distance = glm::max(glm::length(relativePosition), EPSILON);
@@ -430,7 +452,7 @@ void AudioMixerSlave::addStream(AudioMixerClientData::MixableStream& mixableStre
 
     streamPopOutput.readSamples(_bufferSamples, AudioConstants::NETWORK_FRAME_SAMPLES_PER_CHANNEL);
 
-    if (streamToAdd->getLastPopOutputLoudness() == 0.0f) {
+    if (streamToAdd->getLastPopOutputLoudness() == 0.0f || mixableStream.approximateVolume == 0.0f) {
         // call renderSilent to reduce artifacts
         mixableStream.hrtf->renderSilent(_bufferSamples, _mixSamples, HRTF_DATASET_INDEX, azimuth, distance, gain,
                                          AudioConstants::NETWORK_FRAME_SAMPLES_PER_CHANNEL);
