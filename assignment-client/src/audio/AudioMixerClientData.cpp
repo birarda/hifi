@@ -322,11 +322,13 @@ bool AudioMixerClientData::containsValidPosition(ReceivedMessage& message) const
 
     message.seek(SEQUENCE_NUMBER_BYTES);
 
+    // skip over the codec string
+    message.readString();
+
     switch (message.getType()) {
         case PacketType::MicrophoneAudioNoEcho:
         case PacketType::MicrophoneAudioWithEcho: {
-            // skip over the codec string and the stereo flag
-            message.readString();
+            // skip over the stereo flag
             message.seek(message.getPosition() + sizeof(ChannelFlag));
             break;
         }
@@ -336,8 +338,7 @@ bool AudioMixerClientData::containsValidPosition(ReceivedMessage& message) const
             break;
         }
         case PacketType::InjectAudio: {
-            // skip over the codec string, stream ID, stereo flag, and loopback flag
-            message.readString();
+            // skip the stream ID, stereo flag, and loopback flag
             message.seek(message.getPosition() + NUM_STREAM_ID_BYTES + sizeof(ChannelFlag) + sizeof(LoopbackFlag));
         }
         default:
