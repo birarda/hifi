@@ -105,6 +105,10 @@ void AudioMixerClientData::processPackets(ConcurrentAddedStreams& addedStreams) 
         _packetQueue.pop();
     }
     assert(_packetQueue.empty());
+
+    // now that we have processed all packets for this frame
+    // we can prepare the sources from this client to be ready for mixing
+    checkBuffersBeforeFrameSend();
 }
 
 bool isReplicatedPacket(PacketType packetType) {
@@ -273,8 +277,6 @@ void AudioMixerClientData::parseRadiusIgnoreRequest(QSharedPointer<ReceivedMessa
 }
 
 AvatarAudioStream* AudioMixerClientData::getAvatarAudioStream() {
-    QReadLocker readLocker { &_streamsLock };
-
     auto it = std::find_if(_audioStreams.begin(), _audioStreams.end(), [](const SharedStreamPointer& stream){
         return stream->getStreamIdentifier().isNull();
     });
@@ -288,8 +290,6 @@ AvatarAudioStream* AudioMixerClientData::getAvatarAudioStream() {
 }
 
 void AudioMixerClientData::removeAgentAvatarAudioStream() {
-    QWriteLocker writeLocker { &_streamsLock };
-
     auto it = std::remove_if(_audioStreams.begin(), _audioStreams.end(), [](const SharedStreamPointer& stream){
         return stream->getStreamIdentifier().isNull();
     });
@@ -375,8 +375,6 @@ void AudioMixerClientData::processStreamPacket(ReceivedMessage& message, Concurr
         || packetType == PacketType::MicrophoneAudioNoEcho
         || packetType == PacketType::SilentAudioFrame) {
 
-        QWriteLocker writeLocker { &_streamsLock };
-
         auto micStreamIt = std::find_if(_audioStreams.begin(), _audioStreams.end(), [](const SharedStreamPointer& stream){
             return stream->getStreamIdentifier().isNull();
         });
@@ -423,8 +421,6 @@ void AudioMixerClientData::processStreamPacket(ReceivedMessage& message, Concurr
         } else {
             matchingStream = *micStreamIt;
         }
-
-        writeLocker.unlock();
     } else if (packetType == PacketType::InjectAudio) {
 
         // this is injected audio
@@ -433,8 +429,6 @@ void AudioMixerClientData::processStreamPacket(ReceivedMessage& message, Concurr
         message.readString();
 
         QUuid streamIdentifier = QUuid::fromRfc4122(message.readWithoutCopy(NUM_BYTES_RFC4122_UUID));
-
-        QWriteLocker writeLock { &_streamsLock };
 
         auto streamIt = std::find_if(_audioStreams.begin(), _audioStreams.end(), [&streamIdentifier](const SharedStreamPointer& stream) {
             return stream->getStreamIdentifier() == streamIdentifier;
@@ -459,8 +453,6 @@ void AudioMixerClientData::processStreamPacket(ReceivedMessage& message, Concurr
         } else {
             matchingStream = *streamIt;
         }
-
-        writeLock.unlock();
     }
 
     // seek to the beginning of the packet so that the next reader is in the right spot
@@ -482,8 +474,6 @@ void AudioMixerClientData::processStreamPacket(ReceivedMessage& message, Concurr
 }
 
 int AudioMixerClientData::checkBuffersBeforeFrameSend() {
-    QWriteLocker writeLocker { &_streamsLock };
-
     auto it = _audioStreams.begin();
     while (it != _audioStreams.end()) {
         SharedStreamPointer stream = *it;

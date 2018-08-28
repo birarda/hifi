@@ -165,8 +165,7 @@ private:
     };
     PacketQueue _packetQueue;
 
-    QReadWriteLock _streamsLock;
-    AudioStreamVector _audioStreams; // microphone stream from avatar is stored under key of null UUID
+    AudioStreamVector _audioStreams; // microphone stream from avatar has a null stream ID
 
     void optionallyReplicatePacket(ReceivedMessage& packet, const Node& node);
 
