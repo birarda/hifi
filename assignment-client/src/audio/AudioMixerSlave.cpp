@@ -208,11 +208,6 @@ bool AudioMixerSlave::prepareMix(const SharedNodePointer& listener) {
             streamRemoved = matchedRemovedStream != _sharedData.removedStreams.cend();
         }
 
-        if (!streamRemoved) {
-            // remove this stream if this node is being ignored
-            streamRemoved =  listener->isIgnoringNodeWithID(nodeIDStreamID.nodeID);
-        }
-
         if (streamRemoved) {
             // this stream was removed, so swap it with the last item and decrease the end iterator
             --end;
