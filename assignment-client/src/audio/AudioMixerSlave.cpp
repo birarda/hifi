@@ -195,13 +195,6 @@ bool AudioMixerSlave::prepareMix(const SharedNodePointer& listener) {
     auto it = mixableStreams.begin();
     auto end = mixableStreams.end();
     while (it != end) {
-        if (it->positionalStream == listenerAudioStream && listenerAudioStream->shouldLoopbackForNode()) {
-            // special case for echoed listener audio - never throttled
-            addStream(*it, *listenerAudioStream, listenerData->getMasterAvatarGain(), false);
-            ++it;
-            continue;
-        }
-
         // check if this node (and therefore all of the node's streams) has been removed
         auto& nodeIDStreamID = it->nodeStreamID;
         auto matchedRemovedNode = std::find(_sharedData.removedNodes.cbegin(), _sharedData.removedNodes.cend(),
@@ -229,71 +222,92 @@ bool AudioMixerSlave::prepareMix(const SharedNodePointer& listener) {
             continue;
         }
 
-        if (it->ignoredByListener && nodesUnignoredByListener.size() > 0) {
-            // this stream was previously ignored by the listener and we have some unignored streams
-            // check now if it is one of the unignored streams and flag it as such
-            it->ignoredByListener = !containsNodeID(nodesUnignoredByListener, nodeIDStreamID.nodeID);
+        if (it->nodeStreamID.nodeLocalID == listener->getLocalID()) {
+            // streams from this node should be skipped unless loopback is specifically requested
+            if (it->positionalStream->shouldLoopbackForNode()) {
+                it->skippedStream = false;
+            } else {
+                it->approximateVolume = 0.0f;
+                it->skippedStream = true;
+                it->completedSilentRender = true;
 
-        } else if (!it->ignoredByListener && nodesIgnoredByListener.size() > 0) {
-            // this stream was previously not ignored by the listener and we have some newly ignored streams
-            // check now if it is one of the ignored streams and flag it as such
-            it->ignoredByListener = containsNodeID(nodesIgnoredByListener, nodeIDStreamID.nodeID);
-        }
+                // if we know we're skipping this stream, no more processing is required
+                // since we don't do silent HRTF renders for echo streams
+                ++it;
+                continue;
+            }
+        } else {
+            if (it->ignoredByListener && nodesUnignoredByListener.size() > 0) {
+                // this stream was previously ignored by the listener and we have some unignored streams
+                // check now if it is one of the unignored streams and flag it as such
+                it->ignoredByListener = !containsNodeID(nodesUnignoredByListener, nodeIDStreamID.nodeID);
 
-        if (it->ignoringListener && nodesUnignoringListener.size() > 0) {
-            // this stream was previously ignoring the listner and we have some new un-ignoring nodes
-            // check now if it is one of the unignoring streams and flag it as such
-            it->ignoringListener = !containsNodeID(nodesUnignoringListener, nodeIDStreamID.nodeID);
-        } else if (!it->ignoringListener && nodesIgnoringListener.size() > 0) {
-            it->ignoringListener = containsNodeID(nodesIgnoringListener, nodeIDStreamID.nodeID);
-        }
+            } else if (!it->ignoredByListener && nodesIgnoredByListener.size() > 0) {
+                // this stream was previously not ignored by the listener and we have some newly ignored streams
+                // check now if it is one of the ignored streams and flag it as such
+                it->ignoredByListener = containsNodeID(nodesIgnoredByListener, nodeIDStreamID.nodeID);
+            }
 
-        if (it->ignoredByListener
-            || (it->ignoringListener && !(listenerData->getRequestsDomainListData() && listener->getCanKick()))) {
-            // this is a stream ignoring by the listener
-            // or ignoring the listener (and the listener is not an admin asking for (the poorly named) "domain list" data)
-            // so force its volume to zero and move on
-            it->approximateVolume = 0.0f;
+            if (it->ignoringListener && nodesUnignoringListener.size() > 0) {
+                // this stream was previously ignoring the listener and we have some new un-ignoring nodes
+                // check now if it is one of the unignoring streams and flag it as such
+                it->ignoringListener = !containsNodeID(nodesUnignoringListener, nodeIDStreamID.nodeID);
+            } else if (!it->ignoringListener && nodesIgnoringListener.size() > 0) {
+                it->ignoringListener = containsNodeID(nodesIgnoringListener, nodeIDStreamID.nodeID);
+            }
 
-            ++it;
-            continue;
-        }
+            if (it->ignoredByListener
+                || (it->ignoringListener && !(listenerData->getRequestsDomainListData() && listener->getCanKick()))) {
+                // this is a stream ignoring by the listener
+                // or ignoring the listener (and the listener is not an admin asking for (the poorly named) "domain list" data)
+                // mark it skipped and move on
+                it->skippedStream = true;
+            } else {
+                it->skippedStream = false;
+            }
 
-        // for the two ignore radius checks performed below, we do not push the iterator and move on to the next source
-        // as we do for node-based ignore because radius-based ignores are expected to be temporary
-        // and we want to continue providing the HRTF that will allow it to render the best possible result once re-enabled
-        if (listenerAudioStream->isIgnoreBoxEnabled() &&
-            listenerAudioStream->getIgnoreBox().contains(it->positionalStream->getPosition())) {
-            // the listener is ignoring audio sources within a radius, and this source is in that radius
-            // so we force its volume down to zero
-            it->approximateVolume = 0.0f;
-        } else if (it->positionalStream->isIgnoreBoxEnabled() &&
-                   it->positionalStream->getIgnoreBox().contains(listenerAudioStream->getPosition())) {
-            // the source is (bi-directionally) ignoring other audio sources within a radius
-            // and this listener's source is in that radius
-            // so we force its volume down to zero
-            it->approximateVolume = 0.0f;
+            // for the two ignore radius checks performed below, we do not push the iterator and move on to the next source
+            // as we do for node-based ignore because radius-based ignores are expected to be temporary
+            // and we want to continue providing the HRTF that will allow it to render the best possible result once re-enabled
+            if (listenerAudioStream->isIgnoreBoxEnabled() &&
+                listenerAudioStream->getIgnoreBox().contains(it->positionalStream->getPosition())) {
+                // the listener is ignoring audio sources within a radius, and this source is in that radius
+                // so we mark it skipped
+                it->skippedStream = true;
+            } else if (it->positionalStream->isIgnoreBoxEnabled() &&
+                       it->positionalStream->getIgnoreBox().contains(listenerAudioStream->getPosition())) {
+                // the source is (bi-directionally) ignoring other audio sources within a radius
+                // and this listener's source is in that radius
+                // so we mark it skipped
+                it->skippedStream = true;
+            } else {
+                it->skippedStream = false;
+            }
         }
 
         if (!isThrottling) {
             // we aren't throttling, so we already know that we can add this stream to the mix
-
-            // set the approximate volume of the stream to 1.0f
-            it->approximateVolume = 1.0f;
-
             addStream(*it, *listenerAudioStream, listenerData->getMasterAvatarGain(), false);
         } else {
-            // we're throttling, so we need to update the approximate volume for this stream
+            // we're throttling, so we need to update the approximate volume for any un-skipped streams
+            // unless this is simply for an echo (in which case the approx volume is 1.0)
+            if (!it->skippedStream) {
+                if (it->positionalStream != listenerAudioStream) {
+                    // approximate the gain
+                    float gain = approximateGain(*listenerAudioStream, *(it->positionalStream));
 
-            // approximate the gain
-            float gain = approximateGain(*listenerAudioStream, *(it->positionalStream));
+                    // for avatar streams, modify by the set gain adjustment
+                    if (nodeIDStreamID.streamID.isNull()) {
+                        gain *= it->hrtf->getGainAdjustment();
+                    }
 
-            // for avatar streams, modify by the set gain adjustment
-            if (nodeIDStreamID.streamID.isNull()) {
-                gain *= it->hrtf->getGainAdjustment();
+                    it->approximateVolume = it->positionalStream->getLastPopOutputTrailingLoudness() * gain;
+                } else {
+                    it->approximateVolume = 1.0f;
+                }
+            } else {
+                it->approximateVolume = 0.0f;
             }
-
-            it->approximateVolume = it->positionalStream->getLastPopOutputTrailingLoudness() * gain;
         }
 
         ++it;
@@ -346,6 +360,12 @@ bool AudioMixerSlave::prepareMix(const SharedNodePointer& listener) {
 
 void AudioMixerSlave::addStream(AudioMixerClientData::MixableStream& mixableStream, AvatarAudioStream& listeningNodeStream,
                                 float masterListenerGain, bool throttle) {
+
+    if (mixableStream.skippedStream) {
+        // any skipped stream gets no processing and no silent render - early return
+        return;
+    }
+
     ++stats.totalMixes;
 
     auto streamToAdd = mixableStream.positionalStream;
@@ -353,7 +373,7 @@ void AudioMixerSlave::addStream(AudioMixerClientData::MixableStream& mixableStre
     // to reduce artifacts we still call the HRTF functor for every silent or throttled source
     // for the first frame where the source becomes throttled or silent
     // this ensures the correct tail from last mixed block and the correct spatialization of next first block
-    if (throttle || mixableStream.approximateVolume == 0.0f || streamToAdd->getLastPopOutputLoudness() == 0.0f) {
+    if (throttle || mixableStream.skippedStream || streamToAdd->getLastPopOutputLoudness() == 0.0f) {
         if (mixableStream.completedSilentRender) {
 
             if (throttle) {
@@ -452,7 +472,7 @@ void AudioMixerSlave::addStream(AudioMixerClientData::MixableStream& mixableStre
 
     streamPopOutput.readSamples(_bufferSamples, AudioConstants::NETWORK_FRAME_SAMPLES_PER_CHANNEL);
 
-    if (streamToAdd->getLastPopOutputLoudness() == 0.0f || mixableStream.approximateVolume == 0.0f) {
+    if (streamToAdd->getLastPopOutputLoudness() == 0.0f || mixableStream.skippedStream) {
         // call renderSilent to reduce artifacts
         mixableStream.hrtf->renderSilent(_bufferSamples, _mixSamples, HRTF_DATASET_INDEX, azimuth, distance, gain,
                                          AudioConstants::NETWORK_FRAME_SAMPLES_PER_CHANNEL);
