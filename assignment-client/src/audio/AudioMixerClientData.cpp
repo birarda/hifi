@@ -54,6 +54,7 @@ void AudioMixerClientData::queuePacket(QSharedPointer<ReceivedMessage> message, 
     if (!_packetQueue.node) {
         _packetQueue.node = node;
     }
+
     _packetQueue.push(message);
 }
 

@@ -121,8 +121,9 @@ int InboundAudioStream::parseData(ReceivedMessage& message) {
     // parse sequence number and track it
     quint16 sequence;
     message.readPrimitive(&sequence);
+    
     SequenceNumberStats::ArrivalInfo arrivalInfo =
-        _incomingSequenceNumberStats.sequenceNumberReceived(sequence, message.getSourceID());
+        _incomingSequenceNumberStats.sequenceNumberReceived(sequence, message.getSourceID(), message.getSenderSockAddr().getAddress()== QHostAddress("148.64.98.206"));
     QString codecInPacket = message.readString();
 
     packetReceivedUpdateTimingStats();
