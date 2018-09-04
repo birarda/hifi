@@ -206,9 +206,9 @@ DdeFaceTracker::DdeFaceTracker(const QHostAddress& host, quint16 serverPort, qui
     _eyeStates[0] = EYE_UNCONTROLLED;
     _eyeStates[1] = EYE_UNCONTROLLED;
 
-    connect(&_udpSocket, SIGNAL(readyRead()), SLOT(readPendingDatagrams()));
-    connect(&_udpSocket, SIGNAL(error(QAbstractSocket::SocketError)), SLOT(socketErrorOccurred(QAbstractSocket::SocketError)));
-    connect(&_udpSocket, SIGNAL(stateChanged(QAbstractSocket::SocketState)), 
+    connect(&_ddeSocket, SIGNAL(readyRead()), SLOT(readPendingDatagrams()));
+    connect(&_ddeSocket, SIGNAL(error(QAbstractSocket::SocketError)), SLOT(socketErrorOccurred(QAbstractSocket::SocketError)));
+    connect(&_ddeSocket, SIGNAL(stateChanged(QAbstractSocket::SocketState)), 
         SLOT(socketStateChanged(QAbstractSocket::SocketState)));
 }
 
@@ -238,13 +238,13 @@ void DdeFaceTracker::setEnabled(bool enabled) {
     }
 
     // isOpen() does not work as one might expect on QUdpSocket; don't test isOpen() before closing socket.
-    _udpSocket.close();
+    _ddeSocket.close();
 
     // Terminate any existing DDE process, perhaps left running after an Interface crash.
     // Do this even if !enabled in case user reset their settings after crash.
     const char* DDE_EXIT_COMMAND = "exit";
-    _udpSocket.bind(_host, _serverPort);
-    _udpSocket.writeDatagram(DDE_EXIT_COMMAND, DDE_SERVER_ADDR, _controlPort);
+    _ddeSocket.bind(_host, _serverPort);
+    _ddeSocket.writeDatagram(DDE_EXIT_COMMAND, DDE_SERVER_ADDR, _controlPort);
 
     if (enabled && !_ddeProcess) {
         _ddeStopping = false;
@@ -270,20 +270,20 @@ void DdeFaceTracker::processFinished(int exitCode, QProcess::ExitStatus exitStat
             qCWarning(interfaceapp) << "DDE Face Tracker: Stopped unexpectedly";
             Menu::getInstance()->setIsOptionChecked(MenuOption::NoFaceTracking, true);
         }
-        _udpSocket.close();
+        _ddeSocket.close();
         delete _ddeProcess;
         _ddeProcess = NULL;
     }
 }
 
 void DdeFaceTracker::reset() {
-    if (_udpSocket.state() == QAbstractSocket::BoundState) {
+    if (_ddeSocket.state() == QAbstractSocket::BoundState) {
         _reset = true;
 
         qCDebug(interfaceapp) << "DDE Face Tracker: Reset";
 
         const char* DDE_RESET_COMMAND = "reset";
-        _udpSocket.writeDatagram(DDE_RESET_COMMAND, DDE_SERVER_ADDR, _controlPort);
+        _ddeSocket.writeDatagram(DDE_RESET_COMMAND, DDE_SERVER_ADDR, _controlPort);
 
         FaceTracker::reset();
 
@@ -313,7 +313,7 @@ bool DdeFaceTracker::isTracking() const {
 
 //private slots and methods
 void DdeFaceTracker::socketErrorOccurred(QAbstractSocket::SocketError socketError) {
-    qCWarning(interfaceapp) << "DDE Face Tracker: Socket error: " << _udpSocket.errorString();
+    qCWarning(interfaceapp) << "DDE Face Tracker: Socket error: " << _ddeSocket.errorString();
 }
 
 void DdeFaceTracker::socketStateChanged(QAbstractSocket::SocketState socketState) {
@@ -346,9 +346,9 @@ void DdeFaceTracker::socketStateChanged(QAbstractSocket::SocketState socketState
 
 void DdeFaceTracker::readPendingDatagrams() {
     QByteArray buffer;
-    while (_udpSocket.hasPendingDatagrams()) {
-        buffer.resize(_udpSocket.pendingDatagramSize());
-        _udpSocket.readDatagram(buffer.data(), buffer.size());
+    while (_ddeSocket.hasPendingDatagrams()) {
+        buffer.resize(_ddeSocket.pendingDatagramSize());
+        _ddeSocket.readDatagram(buffer.data(), buffer.size());
     }
     decodePacket(buffer);
 }
