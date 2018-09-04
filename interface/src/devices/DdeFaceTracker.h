@@ -101,7 +101,7 @@ private:
     void decodePacket(const QByteArray& buffer);
 
     // sockets
-    QUdpSocket _udpSocket;
+    QUdpSocket _ddeSocket;
     quint64 _lastReceiveTimestamp;
 
     bool _reset;
