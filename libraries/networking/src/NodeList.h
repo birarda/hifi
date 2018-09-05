@@ -27,7 +27,6 @@
 #include <QtCore/QSet>
 #include <QtCore/QSharedPointer>
 #include <QtNetwork/QHostAddress>
-#include <QtNetwork/QUdpSocket>
 
 #include <DependencyManager.h>
 #include <SettingHandle.h>

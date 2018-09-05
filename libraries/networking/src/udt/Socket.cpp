@@ -16,6 +16,7 @@
 #endif
 
 #include <QtCore/QThread>
+#include <QtCore/QCoreApplication>
 
 #include <shared/QtHelpers.h>
 #include <LogHandler.h>
@@ -33,145 +34,150 @@
 
 using namespace udt;
 
-PacketReciever::PacketReciever(QUdpSocket& socket,
-                               tbb::concurrent_queue<Datagram>& incomingDatagrams)
-    : _socket(socket)
-    , _incomingDatagrams(incomingDatagrams)
+PacketReciever::PacketReciever(tbb::concurrent_queue<Datagram>& incomingDatagrams)
+    : _incomingDatagrams(incomingDatagrams)
 {
 }
 
-void PacketReciever::readPendingDatagrams() {
-    qDebug() << Q_FUNC_INFO;
-    int packetsRead = 0;
-    int packetSizeWithHeader = -1;
-    while (_socket.hasPendingDatagrams()
-           && (packetSizeWithHeader = _socket.pendingDatagramSize()) != -1) {
-        qDebug() << Q_FUNC_INFO << "pulling packet";
-        // grab a time point we can mark as the receive time of this packet
-        auto receiveTime = p_high_resolution_clock::now();
-
-
+void PacketReciever::run(int fd) {
+    while (!thread()->isInterruptionRequested()) {
+        static const int MAX_SIZE = 2048;
         // setup a buffer to read the packet into
-        auto buffer = std::unique_ptr<char[]>(new char[packetSizeWithHeader]);
+        auto buffer = std::unique_ptr<char[]>(new char[MAX_SIZE]);
 
-        QHostAddress senderAddress;
-        quint16 senderPort;
+        struct sockaddr_in src_addr;
 
-        // pull the datagram
-        auto sizeRead = _socket.readDatagram(buffer.get(), packetSizeWithHeader,
-                                             &senderAddress, &senderPort);
+        struct iovec iov[1];
+        iov[0].iov_base = buffer.get();
+        iov[0].iov_len = MAX_SIZE;
 
-        // we either didn't pull anything for this packet or there was an error reading (this seems to trigger
-        // on windows even if there's not a packet available)
-        if (sizeRead < 0) {
-            continue;
+        struct msghdr message;
+        message.msg_name = &src_addr;
+        message.msg_namelen = sizeof(src_addr);
+        message.msg_iov = iov;
+        message.msg_iovlen = 1;
+        message.msg_control = 0;
+        message.msg_controllen = 0;
+
+        ssize_t size = recvmsg(fd, &message, 0);
+        if (size < 0) {
+            if (thread()->isInterruptionRequested()) {
+                break;
+            }
+            qCCritical(networking) << "Failed to recv msg:" << strerror(errno);
+        } else if (message.msg_flags & MSG_TRUNC) {
+            qCCritical(networking) << "datagram too large for buffer: truncated";
+        } else {
+            // grab a time point we can mark as the receive time of this packet
+            auto receiveTime = p_high_resolution_clock::now();
+
+            QHostAddress senderAddress((sockaddr*)&src_addr);
+            quint16 senderPort = ntohs(src_addr.sin_port);
+
+            _incomingDatagrams.push({ senderAddress, senderPort, (int)size,
+                std::move(buffer), receiveTime });
+
+            emit pendingDatagrams(1);
         }
 
-        _incomingDatagrams.push({ senderAddress, senderPort, packetSizeWithHeader,
-            std::move(buffer), receiveTime });
-
-        ++packetsRead;
-        if (packetsRead % 100 == 0) {
-            emit pendingDatagrams(0);
-        }
-
+        QCoreApplication::processEvents();
     }
 
-    if (packetsRead > _maxDatagramsRead) {
-        _maxDatagramsRead = packetsRead;
-        qCDebug(networking) << "readPendingDatagrams: Datagrams read:" << packetsRead;
-    }
-    emit pendingDatagrams(packetsRead);
+    thread()->exit();
 }
 
 Socket::Socket(QObject* parent, bool shouldChangeSocketOptions) :
     QObject(parent),
-    _readyReadBackupTimer(new QTimer(this)),
     _shouldChangeSocketOptions(shouldChangeSocketOptions),
-    _packetReciever(_udpSocket, _incomingDatagrams)
+    _packetReciever(_incomingDatagrams)
 {
-    moveToNewNamedThread(&_packetReciever, "PacketReciever", QThread::TimeCriticalPriority);
+    _sockFD = ::socket(AF_INET, SOCK_DGRAM, 0);
+    if (_sockFD < 0) {
+        qCCritical(networking) << "Cannot create socket";
+        assert(false);
+    }
+    moveToNewNamedThread(&_packetReciever, "PacketReciever", [this] {
+        _packetReciever.run(_sockFD);
+    }, QThread::TimeCriticalPriority);
 
-    connect(&_udpSocket, &QUdpSocket::readyRead, &_packetReciever, &PacketReciever::readPendingDatagrams);
-    connect(&_udpSocket, &QUdpSocket::readyRead, [] {
-        qDebug() << "Got readyRead()";
-    });
     connect(&_packetReciever, &PacketReciever::pendingDatagrams, this, &Socket::processPendingDatagrams);
 
     // make sure we hear about errors and state changes from the underlying socket
-    connect(&_udpSocket, SIGNAL(error(QAbstractSocket::SocketError)),
-            this, SLOT(handleSocketError(QAbstractSocket::SocketError)));
-    connect(&_udpSocket, &QAbstractSocket::stateChanged, this, &Socket::handleStateChanged);
-
-    // in order to help track down the zombie server bug, add a timer to check if we missed a readyRead
-    const int READY_READ_BACKUP_CHECK_MSECS = 200 * 1000;
-    connect(_readyReadBackupTimer, &QTimer::timeout, this, &Socket::checkForReadyReadBackup);
-    _readyReadBackupTimer->start(READY_READ_BACKUP_CHECK_MSECS);
+//    connect(&_udpSocket, SIGNAL(error(QAbstractSocket::SocketError)),
+//            this, SLOT(handleSocketError(QAbstractSocket::SocketError)));
+//    connect(&_udpSocket, &QAbstractSocket::stateChanged, this, &Socket::handleStateChanged);
 }
 
 Socket::~Socket() {
-    _packetReciever.thread()->quit();
+    _packetReciever.thread()->requestInterruption();
+    ::close(_sockFD);
 }
 
 void Socket::bind(const QHostAddress& address, quint16 port) {
-    _udpSocket.bind(address, port);
+    // TODO: ignoring address right now
+    struct sockaddr_in sockAddr;
+    memset((char *)&sockAddr, 0, sizeof(sockAddr));
+    sockAddr.sin_family = AF_INET;
+    sockAddr.sin_addr.s_addr = htonl(INADDR_ANY);
+    sockAddr.sin_port = htons(port);
+
+    if (::bind(_sockFD, (struct sockaddr*)&sockAddr, sizeof(sockAddr)) < 0) {
+        qCCritical(networking) << "Bind failed";
+        assert(false);
+    }
+
+    struct sockaddr_in localAddress;
+    socklen_t addressLength = sizeof(localAddress);;
+    ::getsockname(_sockFD, (struct sockaddr*)&localAddress, &addressLength);
+    _localPort = ntohs(localAddress.sin_port);
 
     if (_shouldChangeSocketOptions) {
         setSystemBufferSizes();
 
 #if defined(Q_OS_LINUX)
-        auto sd = _udpSocket.socketDescriptor();
         int val = IP_PMTUDISC_DONT;
-        setsockopt(sd, IPPROTO_IP, IP_MTU_DISCOVER, &val, sizeof(val));
+        setsockopt(_sockFD, IPPROTO_IP, IP_MTU_DISCOVER, &val, sizeof(val));
 #elif defined(Q_OS_WINDOWS)
-        auto sd = _udpSocket.socketDescriptor();
         int val = 0; // false
-        setsockopt(sd, IPPROTO_IP, IP_DONTFRAGMENT, &val, sizeof(val));
+        setsockopt(_sockFD, IPPROTO_IP, IP_DONTFRAGMENT, &val, sizeof(val));
 #endif
     }
 }
 
 void Socket::rebind() {
-    rebind(_udpSocket.localPort());
+    rebind(localPort());
 }
 
 void Socket::rebind(quint16 localPort) {
-    _udpSocket.close();
+    _packetReciever.thread()->requestInterruption();
+    ::close(_sockFD);
     bind(QHostAddress::AnyIPv4, localPort);
+    moveToNewNamedThread(&_packetReciever, "PacketReciever", [this] {
+        _packetReciever.run(_sockFD);
+    }, QThread::TimeCriticalPriority);
 }
 
 void Socket::setSystemBufferSizes() {
-    for (int i = 0; i < 2; i++) {
-        QAbstractSocket::SocketOption bufferOpt;
-        QString bufferTypeString;
+    uint32_t recvBufferSize = 0;
+    uint32_t sendBufferSize = 0;
+    uint32_t optLen = sizeof(int);
 
-        int numBytes = 0;
+    ::getsockopt(_sockFD, SOL_SOCKET, SO_RCVBUF, &recvBufferSize, &optLen);
 
-        if (i == 0) {
-            bufferOpt = QAbstractSocket::SendBufferSizeSocketOption;
-            numBytes = udt::UDP_SEND_BUFFER_SIZE_BYTES;
-            bufferTypeString = "send";
-
-        } else {
-            bufferOpt = QAbstractSocket::ReceiveBufferSizeSocketOption;
-            numBytes = udt::UDP_RECEIVE_BUFFER_SIZE_BYTES;
-            bufferTypeString = "receive";
-        }
-
-        int oldBufferSize = _udpSocket.socketOption(bufferOpt).toInt();
-
-        if (oldBufferSize < numBytes) {
-            _udpSocket.setSocketOption(bufferOpt, QVariant(numBytes));
-            int newBufferSize = _udpSocket.socketOption(bufferOpt).toInt();
-
-            qCDebug(networking) << "Changed socket" << bufferTypeString << "buffer size from" << oldBufferSize << "to"
-                << newBufferSize << "bytes";
-        } else {
-            // don't make the buffer smaller
-            qCDebug(networking) << "Did not change socket" << bufferTypeString << "buffer size from" << oldBufferSize
-                << "since it is larger than desired size of" << numBytes;
-        }
+    if (recvBufferSize < udt::UDP_RECEIVE_BUFFER_SIZE_BYTES) {
+        ::setsockopt(_sockFD, SOL_SOCKET, SO_RCVBUF, &udt::UDP_RECEIVE_BUFFER_SIZE_BYTES, optLen);
+        qCDebug(networking) << "Changed socket receive buffer size from" << recvBufferSize << "to"
+        << udt::UDP_RECEIVE_BUFFER_SIZE_BYTES << "bytes";
     }
+
+
+    ::getsockopt(_sockFD, SOL_SOCKET, SO_SNDBUF, &sendBufferSize, &optLen);
+    if (sendBufferSize < udt::UDP_SEND_BUFFER_SIZE_BYTES) {
+        ::setsockopt(_sockFD, SOL_SOCKET, SO_SNDBUF, &udt::UDP_SEND_BUFFER_SIZE_BYTES, optLen);
+        qCDebug(networking) << "Changed socket send buffer size from" << sendBufferSize << "to"
+        << udt::UDP_SEND_BUFFER_SIZE_BYTES << "bytes";
+    }
+
 }
 
 qint64 Socket::writeBasePacket(const udt::BasePacket& packet, const HifiSockAddr &sockAddr) {
@@ -282,11 +288,29 @@ qint64 Socket::writeDatagram(const char* data, qint64 size, const HifiSockAddr& 
 
 qint64 Socket::writeDatagram(const QByteArray& datagram, const HifiSockAddr& sockAddr) {
 
-    qint64 bytesWritten = _udpSocket.writeDatagram(datagram, sockAddr.getAddress(), sockAddr.getPort());
+    struct sockaddr_in servaddr;
+    memset((char*)&servaddr, 0, sizeof(servaddr));
+    servaddr.sin_family = AF_INET;
+    servaddr.sin_addr.s_addr = htonl(sockAddr.getAddress().toIPv4Address());
+    servaddr.sin_port = htons(sockAddr.getPort());
 
+    struct iovec iov[1];
+    iov[0].iov_base = (void*)datagram.data();
+    iov[0].iov_len = datagram.size();
+
+    struct msghdr message;
+    memset((char*)&message, 0, sizeof(message));
+    message.msg_name = &servaddr;
+    message.msg_namelen = sizeof(servaddr);
+    message.msg_iov = iov;
+    message.msg_iovlen = 1;
+    message.msg_control = 0;
+    message.msg_controllen = 0;
+
+    qint64 bytesWritten = ::sendmsg(_sockFD, &message, 0);
     if (bytesWritten < 0) {
-        // when saturating a link this isn't an uncommon message - suppress it so it doesn't bomb the debug
-        HIFI_FCDEBUG(networking(), "Socket::writeDatagram" << _udpSocket.error());
+        qDebug() << sockAddr.getAddress() << sockAddr.getPort();
+        qCCritical(networking) << "Failed to send msg:" << bytesWritten << strerror(errno);
     }
 
     return bytesWritten;
@@ -360,32 +384,9 @@ void Socket::messageFailed(Connection* connection, Packet::MessageNumber message
     }
 }
 
-void Socket::checkForReadyReadBackup() {
-    if (_udpSocket.hasPendingDatagrams()) {
-        qCDebug(networking) << "Socket::checkForReadyReadBackup() detected blocked readyRead signal. Flushing pending datagrams.";
-
-        // so that birarda can possibly figure out how the heck we get into this state in the first place
-        // output the sequence number and socket address of the last processed packet
-        qCDebug(networking) << "Socket::checkForReadyReadyBackup() last sequence number"
-            << (uint32_t) _lastReceivedSequenceNumber << "from" << _lastPacketSockAddr << "-"
-            << _lastPacketSizeRead << "bytes";
-
-
-        // drop all of the pending datagrams on the floor
-        while (_udpSocket.hasPendingDatagrams()) {
-            _udpSocket.readDatagram(nullptr, 0);
-        }
-    }
-}
-
 void Socket::processPendingDatagrams(int) {
-    qDebug() << Q_FUNC_INFO;
     Datagram datagram;
     while (_incomingDatagrams.try_pop(datagram)) {
-        qDebug() << Q_FUNC_INFO << "processing packet";
-        // we're reading a packet so re-start the readyRead backup timer
-        _readyReadBackupTimer->start();
-
         int datagramSize = datagram._datagramLength;
         auto receiveTime = datagram._receiveTime;
         HifiSockAddr senderSockAddr(datagram._senderAddress,
