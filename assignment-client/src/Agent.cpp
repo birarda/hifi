@@ -441,6 +441,7 @@ void Agent::executeScript() {
                 _audioGate.render(samples, samples, numSamples);
             }
 
+<<<<<<< HEAD
             computeLoudness(&audio, scriptedAvatar);
 
             // state machine to detect gate opening and closing
@@ -529,9 +530,13 @@ void Agent::executeScript() {
             recordingInterface->stopRecording();
         }
 
+<<<<<<< HEAD
         avatarDataTimer->stop();
         _avatarAudioTimer.stop();
     }
+=======
+    Frame::clearFrameHandler(AVATAR_FRAME_TYPE);
+>>>>>>> hacked bot for spot with encoder fix and always silent frames
 
     setFinished(true);
 }
@@ -742,9 +747,8 @@ void Agent::computeLoudness(const QByteArray* decodedBuffer, QSharedPointer<Scri
 
 void Agent::processAgentAvatarAudio() {
     auto recordingInterface = DependencyManager::get<RecordingScriptingInterface>();
-    bool isPlayingRecording = recordingInterface->isPlaying();
 
-    if (_isAvatar && ((_isListeningToAudioStream && !isPlayingRecording) || _avatarSound)) {
+    if (_isAvatar && (_isListeningToAudioStream || _avatarSound)) {
         // if we have an avatar audio stream then send it out to our audio-mixer
         auto scriptedAvatar = DependencyManager::get<ScriptableAvatar>();
         bool silentFrame = true;
@@ -788,7 +792,7 @@ void Agent::processAgentAvatarAudio() {
         // seek past the sequence number, will be packed when destination node is known
         audioPacket->seek(sizeof(quint16));
 
-        if (silentFrame) {
+        if (silentFrame && !_flushEncoder) {
 
             if (!_isListeningToAudioStream) {
                 // if we have a silent frame and we're not listening then just send nothing and break out of here
@@ -810,7 +814,7 @@ void Agent::processAgentAvatarAudio() {
 
             // no matter what, the loudness should be set to 0
             computeLoudness(nullptr, scriptedAvatar);
-        } else if (nextSoundOutput) {
+        } else if (nextSoundOutput || _flushEncoder) {
 
             // write the codec
             audioPacket->writeString(_selectedCodecName);
