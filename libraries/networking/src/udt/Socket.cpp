@@ -45,28 +45,24 @@ void PacketReciever::run(int fd) {
         // setup a buffer to read the packet into
         auto buffer = std::unique_ptr<char[]>(new char[MAX_SIZE]);
 
-        struct sockaddr_in src_addr;
+        sockaddr_in src_addr;
+#ifdef Q_OS_WIN
+        int src_addrlen = sizeof(src_addr);
+#else
+        uint32_t src_addrlen = sizeof(src_addr);
+#endif
 
-        struct iovec iov[1];
-        iov[0].iov_base = buffer.get();
-        iov[0].iov_len = MAX_SIZE;
+        auto size = ::recvfrom(fd, buffer.get(), MAX_SIZE, 0, (sockaddr*)&src_addr, &src_addrlen);
 
-        struct msghdr message;
-        message.msg_name = &src_addr;
-        message.msg_namelen = sizeof(src_addr);
-        message.msg_iov = iov;
-        message.msg_iovlen = 1;
-        message.msg_control = 0;
-        message.msg_controllen = 0;
-
-        ssize_t size = recvmsg(fd, &message, 0);
+#ifdef Q_OS_WIN
+        if (size == SOCKET_ERROR) {
+#else
         if (size < 0) {
+#endif
             if (thread()->isInterruptionRequested()) {
                 break;
             }
-            qCCritical(networking) << "Failed to recv msg:" << strerror(errno);
-        } else if (message.msg_flags & MSG_TRUNC) {
-            qCCritical(networking) << "datagram too large for buffer: truncated";
+            qCCritical(networking) << "Failed to recv msg";
         } else {
             // grab a time point we can mark as the receive time of this packet
             auto receiveTime = p_high_resolution_clock::now();
@@ -91,11 +87,27 @@ Socket::Socket(QObject* parent, bool shouldChangeSocketOptions) :
     _shouldChangeSocketOptions(shouldChangeSocketOptions),
     _packetReciever(_incomingDatagrams)
 {
+#ifdef Q_OS_WIN
+    WSADATA wsaData;
+    int result = WSAStartup(MAKEWORD(2,2), &wsaData);
+    if (result != 0) {
+        qCCritical(networking) << "WSAStartup returned an error";
+        assert(false);
+    }
+    _sockFD = socket(AF_INET, SOCK_DGRAM, 0);
+    if (_sockFD == INVALID_SOCKET) {
+        qCCritical(networking) << "Cannot create socket";
+        assert(false);
+        WSACleanup();
+    }
+#else
     _sockFD = ::socket(AF_INET, SOCK_DGRAM, 0);
     if (_sockFD < 0) {
         qCCritical(networking) << "Cannot create socket";
         assert(false);
     }
+#endif
+
     moveToNewNamedThread(&_packetReciever, "PacketReciever", [this] {
         _packetReciever.run(_sockFD);
     }, QThread::TimeCriticalPriority);
@@ -110,25 +122,30 @@ Socket::Socket(QObject* parent, bool shouldChangeSocketOptions) :
 
 Socket::~Socket() {
     _packetReciever.thread()->requestInterruption();
+#ifdef Q_OS_WIN
+    ::closesocket(_sockFD);
+    WSACleanup();
+#else
     ::close(_sockFD);
+#endif
 }
 
 void Socket::bind(const QHostAddress& address, quint16 port) {
     // TODO: ignoring address right now
-    struct sockaddr_in sockAddr;
+    sockaddr_in sockAddr;
     memset((char *)&sockAddr, 0, sizeof(sockAddr));
     sockAddr.sin_family = AF_INET;
     sockAddr.sin_addr.s_addr = htonl(INADDR_ANY);
     sockAddr.sin_port = htons(port);
 
-    if (::bind(_sockFD, (struct sockaddr*)&sockAddr, sizeof(sockAddr)) < 0) {
+    if (::bind(_sockFD, (sockaddr*)&sockAddr, sizeof(sockAddr)) < 0) {
         qCCritical(networking) << "Bind failed";
         assert(false);
     }
 
-    struct sockaddr_in localAddress;
+    sockaddr_in localAddress;
     socklen_t addressLength = sizeof(localAddress);;
-    ::getsockname(_sockFD, (struct sockaddr*)&localAddress, &addressLength);
+    ::getsockname(_sockFD, (sockaddr*)&localAddress, &addressLength);
     _localPort = ntohs(localAddress.sin_port);
 
     if (_shouldChangeSocketOptions) {
@@ -144,36 +161,51 @@ void Socket::bind(const QHostAddress& address, quint16 port) {
     }
 }
 
-void Socket::rebind() {
-    rebind(localPort());
-}
-
 void Socket::rebind(quint16 localPort) {
     _packetReciever.thread()->requestInterruption();
+#ifdef Q_OS_WIN
+    ::closesocket(_sockFD);
+    _sockFD = socket(AF_INET, SOCK_DGRAM, 0);
+    if (_sockFD == INVALID_SOCKET) {
+        qCCritical(networking) << "Cannot create socket";
+        assert(false);
+        WSACleanup();
+    }
+#else
     ::close(_sockFD);
-    bind(QHostAddress::AnyIPv4, localPort);
+    _sockFD = ::socket(AF_INET, SOCK_DGRAM, 0);
+    if (_sockFD < 0) {
+        qCCritical(networking) << "Cannot create socket";
+        assert(false);
+    }
+#endif
     moveToNewNamedThread(&_packetReciever, "PacketReciever", [this] {
         _packetReciever.run(_sockFD);
     }, QThread::TimeCriticalPriority);
+    bind(QHostAddress::AnyIPv4, localPort);
 }
 
 void Socket::setSystemBufferSizes() {
     uint32_t recvBufferSize = 0;
     uint32_t sendBufferSize = 0;
-    uint32_t optLen = sizeof(int);
+#ifdef Q_OS_WIN
+    int optLen = sizeof(uint32_t);
+#else
+    uint32_t optLen = sizeof(uint32_t);
+#endif
 
-    ::getsockopt(_sockFD, SOL_SOCKET, SO_RCVBUF, &recvBufferSize, &optLen);
+    ::getsockopt(_sockFD, SOL_SOCKET, SO_RCVBUF, (char*)&recvBufferSize, &optLen);
 
     if (recvBufferSize < udt::UDP_RECEIVE_BUFFER_SIZE_BYTES) {
-        ::setsockopt(_sockFD, SOL_SOCKET, SO_RCVBUF, &udt::UDP_RECEIVE_BUFFER_SIZE_BYTES, optLen);
+        ::setsockopt(_sockFD, SOL_SOCKET, SO_RCVBUF, (char*)&udt::UDP_RECEIVE_BUFFER_SIZE_BYTES, optLen);
         qCDebug(networking) << "Changed socket receive buffer size from" << recvBufferSize << "to"
         << udt::UDP_RECEIVE_BUFFER_SIZE_BYTES << "bytes";
     }
 
 
-    ::getsockopt(_sockFD, SOL_SOCKET, SO_SNDBUF, &sendBufferSize, &optLen);
+    ::getsockopt(_sockFD, SOL_SOCKET, SO_SNDBUF, (char*)&sendBufferSize, &optLen);
     if (sendBufferSize < udt::UDP_SEND_BUFFER_SIZE_BYTES) {
-        ::setsockopt(_sockFD, SOL_SOCKET, SO_SNDBUF, &udt::UDP_SEND_BUFFER_SIZE_BYTES, optLen);
+        ::setsockopt(_sockFD, SOL_SOCKET, SO_SNDBUF, (char*)&udt::UDP_SEND_BUFFER_SIZE_BYTES, optLen);
         qCDebug(networking) << "Changed socket send buffer size from" << sendBufferSize << "to"
         << udt::UDP_SEND_BUFFER_SIZE_BYTES << "bytes";
     }
@@ -288,29 +320,16 @@ qint64 Socket::writeDatagram(const char* data, qint64 size, const HifiSockAddr& 
 
 qint64 Socket::writeDatagram(const QByteArray& datagram, const HifiSockAddr& sockAddr) {
 
-    struct sockaddr_in servaddr;
+    sockaddr_in servaddr;
     memset((char*)&servaddr, 0, sizeof(servaddr));
     servaddr.sin_family = AF_INET;
     servaddr.sin_addr.s_addr = htonl(sockAddr.getAddress().toIPv4Address());
     servaddr.sin_port = htons(sockAddr.getPort());
 
-    struct iovec iov[1];
-    iov[0].iov_base = (void*)datagram.data();
-    iov[0].iov_len = datagram.size();
-
-    struct msghdr message;
-    memset((char*)&message, 0, sizeof(message));
-    message.msg_name = &servaddr;
-    message.msg_namelen = sizeof(servaddr);
-    message.msg_iov = iov;
-    message.msg_iovlen = 1;
-    message.msg_control = 0;
-    message.msg_controllen = 0;
-
-    qint64 bytesWritten = ::sendmsg(_sockFD, &message, 0);
+    qint64 bytesWritten = ::sendto(_sockFD, datagram.data(), datagram.size(), 0, (sockaddr*)&servaddr, sizeof(servaddr));
     if (bytesWritten < 0) {
         qDebug() << sockAddr.getAddress() << sockAddr.getPort();
-        qCCritical(networking) << "Failed to send msg:" << bytesWritten << strerror(errno);
+        qCCritical(networking) << "Failed to send msg:" << bytesWritten;
     }
 
     return bytesWritten;
