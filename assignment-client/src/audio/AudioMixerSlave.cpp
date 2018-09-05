@@ -354,6 +354,7 @@ void AudioMixerSlave::addStream(AudioMixerClientData::MixableStream& mixableStre
 
     if (mixableStream.skippedStream) {
         // any skipped stream gets no processing and no silent render - early return
+        ++stats.skippedOther;
         return;
     }
 
@@ -364,11 +365,13 @@ void AudioMixerSlave::addStream(AudioMixerClientData::MixableStream& mixableStre
     // to reduce artifacts we still call the HRTF functor for every silent or throttled source
     // for the first frame where the source becomes throttled or silent
     // this ensures the correct tail from last mixed block and the correct spatialization of next first block
-    if (throttle || mixableStream.skippedStream || streamToAdd->getLastPopOutputLoudness() == 0.0f) {
+    if (throttle || streamToAdd->getLastPopOutputLoudness() == 0.0f) {
         if (mixableStream.completedSilentRender) {
 
-            if (throttle) {
-                ++stats.hrtfThrottleRenders;
+            if (streamToAdd->getLastPopOutputLoudness() == 0.0f) {
+                ++stats.skippedSilent;
+            } else {
+                ++stats.skippedThrottle;
             }
 
             return;
@@ -463,7 +466,7 @@ void AudioMixerSlave::addStream(AudioMixerClientData::MixableStream& mixableStre
 
     streamPopOutput.readSamples(_bufferSamples, AudioConstants::NETWORK_FRAME_SAMPLES_PER_CHANNEL);
 
-    if (streamToAdd->getLastPopOutputLoudness() == 0.0f || mixableStream.skippedStream) {
+    if (streamToAdd->getLastPopOutputLoudness() == 0.0f) {
         // call renderSilent to reduce artifacts
         mixableStream.hrtf->renderSilent(_bufferSamples, _mixSamples, HRTF_DATASET_INDEX, azimuth, distance, gain,
                                          AudioConstants::NETWORK_FRAME_SAMPLES_PER_CHANNEL);
