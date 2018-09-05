@@ -14,7 +14,6 @@
 
 #include <QtCore/QCoreApplication>
 #include <QtCore/QSharedPointer>
-#include <QUdpSocket>
 
 #include <openssl/rsa.h>
 
