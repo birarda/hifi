@@ -17,11 +17,12 @@
 #include <functional>
 #include <unordered_map>
 #include <mutex>
-#include <list>
 
 #include <QtCore/QObject>
 #include <QtCore/QTimer>
 #include <QtNetwork/QUdpSocket>
+
+#include <tbb/concurrent_queue.h>
 
 #include "../HifiSockAddr.h"
 #include "TCPVegasCC.h"
@@ -37,6 +38,7 @@ class BasePacket;
 class Packet;
 class PacketList;
 class SequenceNumber;
+class PacketReciever;
 
 using PacketFilterOperator = std::function<bool(const Packet&)>;
 using ConnectionCreationFilterOperator = std::function<bool(const HifiSockAddr&)>;
@@ -46,6 +48,33 @@ using PacketHandler = std::function<void(std::unique_ptr<Packet>)>;
 using MessageHandler = std::function<void(std::unique_ptr<Packet>)>;
 using MessageFailureHandler = std::function<void(HifiSockAddr, udt::Packet::MessageNumber)>;
 
+struct Datagram {
+    QHostAddress _senderAddress;
+    int _senderPort;
+    int _datagramLength;
+    std::unique_ptr<char[]> _datagram;
+    p_high_resolution_clock::time_point _receiveTime;
+};
+
+class PacketReciever : public QObject {
+    Q_OBJECT
+
+public:
+    PacketReciever(QUdpSocket& socket,
+                   tbb::concurrent_queue<Datagram>& incomingDatagrams);
+
+public slots:
+    void readPendingDatagrams();
+
+signals:
+    void pendingDatagrams(int datagramCount);
+
+private:
+    QUdpSocket& _socket;
+    tbb::concurrent_queue<Datagram>& _incomingDatagrams;
+    int _maxDatagramsRead { 0 };
+};
+
 class Socket : public QObject {
     Q_OBJECT
 
@@ -54,8 +83,9 @@ class Socket : public QObject {
 
 public:
     using StatsVector = std::vector<std::pair<HifiSockAddr, ConnectionStats::Stats>>;
-    
+
     Socket(QObject* object = 0, bool shouldChangeSocketOptions = true);
+    ~Socket();
     
     quint16 localPort() const { return _udpSocket.localPort(); }
     
@@ -95,14 +125,12 @@ public:
 
 signals:
     void clientHandshakeRequestComplete(const HifiSockAddr& sockAddr);
-    void pendingDatagrams(int datagramCount);
 
 public slots:
     void cleanupConnection(HifiSockAddr sockAddr);
     void clearConnections();
     
 private slots:
-    void readPendingDatagrams();
     void processPendingDatagrams(int datagramCount);
     void checkForReadyReadBackup();
 
@@ -122,8 +150,8 @@ private:
     
     Q_INVOKABLE void writeReliablePacket(Packet* packet, const HifiSockAddr& sockAddr);
     Q_INVOKABLE void writeReliablePacketList(PacketList* packetList, const HifiSockAddr& sockAddr);
-    
-    QUdpSocket _udpSocket { this };
+
+    QUdpSocket _udpSocket;
     PacketFilterOperator _packetFilterOperator;
     PacketHandler _packetHandler;
     MessageHandler _messageHandler;
@@ -148,16 +176,9 @@ private:
     SequenceNumber _lastReceivedSequenceNumber;
     HifiSockAddr _lastPacketSockAddr;
 
-    struct Datagram {
-        QHostAddress _senderAddress;
-        int _senderPort;
-        int _datagramLength;
-        std::unique_ptr<char[]> _datagram;
-        p_high_resolution_clock::time_point _receiveTime;
-    };
+    tbb::concurrent_queue<Datagram> _incomingDatagrams;
 
-    std::list<Datagram> _incomingDatagrams;
-    int _maxDatagramsRead { 0 };
+    PacketReciever _packetReciever;
     
     friend UDTTest;
 };
