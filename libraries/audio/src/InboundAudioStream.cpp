@@ -172,7 +172,6 @@ int InboundAudioStream::parseData(ReceivedMessage& message) {
 
                 } else {
                     _mismatchedAudioCodecCount++;
-                    qDebug(audio) << "Codec mismatch: expected" << _selectedCodecName << "got" << codecInPacket;
 
                     if (packetPCM) {
                         // If there are PCM packets in-flight after the codec is changed, use them.
@@ -192,7 +191,8 @@ int InboundAudioStream::parseData(ReceivedMessage& message) {
                         auto sendingNode = DependencyManager::get<NodeList>()->nodeWithLocalID(message.getSourceID());
                         if (sendingNode) {
                             emit mismatchedAudioCodec(sendingNode, _selectedCodecName, codecInPacket);
-                            qDebug(audio) << "Codec mismatch threshold exceeded, SelectedAudioFormat(" << _selectedCodecName << " ) sent";
+                            qDebug(audio) << "Codec mismatch threshold exceeded, sent selected codec"
+                                << _selectedCodecName << "to" << message.getSenderSockAddr();
                         }
                     }
                 }
