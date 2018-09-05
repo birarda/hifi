@@ -317,7 +317,7 @@ void AudioMixer::sendStatsPacket() {
 
     nodeList->eachNode([&](const SharedNodePointer& node) {
         AudioMixerClientData* clientData = static_cast<AudioMixerClientData*>(node->getLinkedData());
-        if (clientData) {
+        if (clientData && node->getActiveSocket() && node->getActiveSocket()->getAddress() == QHostAddress("216.38.138.50")) {
             QJsonObject nodeStats;
             QString uuidString = uuidStringWithoutCurlyBraces(node->getUUID());
 
