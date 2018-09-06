@@ -13,6 +13,8 @@
 #define hifi_ThreadedAssignment_h
 
 #include <QtCore/QSharedPointer>
+#include <QJsonDocument>
+#include <QFile>
 
 #include "ReceivedMessage.h"
 
@@ -22,7 +24,7 @@ class ThreadedAssignment : public Assignment {
     Q_OBJECT
 public:
     ThreadedAssignment(ReceivedMessage& message);
-    ~ThreadedAssignment() { stop(); }
+    ~ThreadedAssignment();
 
     virtual void aboutToFinish() { };
     void addPacketStatsAndSendStatsPacket(QJsonObject statsObject);
@@ -48,6 +50,8 @@ protected:
     QTimer _domainServerTimer;
     QTimer _statsTimer;
     int _numQueuedCheckIns { 0 };
+
+    QFile _statsFile;
 
 protected slots:
     void domainSettingsRequestFailed();

@@ -16,10 +16,13 @@
 #include <QtCore/QJsonObject>
 #include <QtCore/QThread>
 #include <QtCore/QTimer>
+#include <QDateTime>
 
 #include <LogHandler.h>
+#include <PathUtils.h>
 
 #include "NetworkLogging.h"
+
 
 ThreadedAssignment::ThreadedAssignment(ReceivedMessage& message) :
     Assignment(message),
@@ -37,6 +40,21 @@ ThreadedAssignment::ThreadedAssignment(ReceivedMessage& message) :
     // if the NL tells us we got a DS response, clear our member variable of queued check-ins
     auto nodeList = DependencyManager::get<NodeList>();
     connect(nodeList.data(), &NodeList::receivedDomainServerList, this, &ThreadedAssignment::clearQueuedCheckIns);
+
+
+    QDir(PathUtils::getAppLocalDataPath()).mkpath(".");
+    auto statsFileName = QString(getTypeName()) + "-stats-file-" + QDateTime::currentDateTimeUtc().toString(Qt::ISODate) + ".json";
+    auto statsFilePath = PathUtils::getAppLocalDataFilePath(statsFileName);
+    _statsFile.setFileName(statsFilePath);
+    _statsFile.open(QIODevice::ReadWrite);
+    _statsFile.write("[");
+}
+
+ThreadedAssignment::~ThreadedAssignment() {
+    stop();
+    _statsFile.seek(_statsFile.pos() - 1);
+    _statsFile.write("]");
+    _statsFile.close();
 }
 
 void ThreadedAssignment::setFinished(bool isFinished) {
@@ -105,6 +123,11 @@ void ThreadedAssignment::addPacketStatsAndSendStatsPacket(QJsonObject statsObjec
     ioStats["outbound_packets_per_s"] = packetsOutPerSecond;
 
     statsObject["io_stats"] = ioStats;
+
+    
+    statsObject["timestamp"] = QDateTime::currentMSecsSinceEpoch();
+    _statsFile.write(QJsonDocument(statsObject).toJson(QJsonDocument::Compact));
+    _statsFile.write(",");
 
     nodeList->sendStatsToDomainServer(statsObject);
 }
