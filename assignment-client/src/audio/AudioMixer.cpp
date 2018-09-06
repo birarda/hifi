@@ -315,28 +315,6 @@ void AudioMixer::sendStatsPacket() {
     _numStatFrames = _numSilentPackets = 0;
     _stats.reset();
 
-    // add stats for each listerner
-    auto nodeList = DependencyManager::get<NodeList>();
-    QJsonObject listenerStats;
-
-    nodeList->eachNode([&](const SharedNodePointer& node) {
-        AudioMixerClientData* clientData = static_cast<AudioMixerClientData*>(node->getLinkedData());
-        if (clientData) {
-            QJsonObject nodeStats;
-            QString uuidString = uuidStringWithoutCurlyBraces(node->getUUID());
-
-            nodeStats["outbound_kbps"] = node->getOutboundBandwidth();
-            nodeStats[USERNAME_UUID_REPLACEMENT_STATS_KEY] = uuidString;
-
-            nodeStats["jitter"] = clientData->getAudioStreamStats();
-
-            listenerStats[uuidString] = nodeStats;
-        }
-    });
-
-    // add the listeners object to the root object
-    statsObject["z_listeners"] = listenerStats;
-
     // send off the stats packets
     ThreadedAssignment::addPacketStatsAndSendStatsPacket(statsObject);
 }
