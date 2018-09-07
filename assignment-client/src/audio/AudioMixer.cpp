@@ -414,6 +414,18 @@ void AudioMixer::start() {
             });
         }
 
+        // process queued events (networking, global audio packets, &c.)
+        {
+            auto eventsTimer = _eventsTiming.timer();
+
+            // clear removed nodes and removed streams before we process events that will setup the new set
+            _workerSharedData.removedNodes.clear();
+            _workerSharedData.removedStreams.clear();
+
+            // since we're a while loop we need to yield to qt's event processing
+            QCoreApplication::processEvents();
+        }
+
         nodeList->nestedEach([&](NodeList::const_iterator cbegin, NodeList::const_iterator cend) {
             // mix across slave threads
             {
@@ -431,17 +443,6 @@ void AudioMixer::start() {
         ++frame;
         ++_numStatFrames;
 
-        // process queued events (networking, global audio packets, &c.)
-        {
-            auto eventsTimer = _eventsTiming.timer();
-
-            // clear removed nodes and removed streams before we process events that will setup the new set
-            _workerSharedData.removedNodes.clear();
-            _workerSharedData.removedStreams.clear();
-
-            // since we're a while loop we need to yield to qt's event processing
-            QCoreApplication::processEvents();
-        }
 
         if (_isFinished) {
             // alert qt eventing that this is finished
