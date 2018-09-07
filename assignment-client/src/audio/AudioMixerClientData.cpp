@@ -221,11 +221,26 @@ void AudioMixerClientData::parseNodeIgnoreRequest(QSharedPointer<ReceivedMessage
     if (ignoredNodesPair.second) {
         // we have newly ignored nodes, add them to our vector
         _newIgnoredNodeIDs.insert(std::end(_newIgnoredNodeIDs),
-                                  std::begin(ignoredNodesPair.first), std::begin(ignoredNodesPair.first));
+                                  std::begin(ignoredNodesPair.first), std::end(ignoredNodesPair.first));
     } else {
         // we have newly unignored nodes, add them to our vector
-        _newUnignoredNodeIDs.insert(std::end(_newIgnoredNodeIDs),
-                                    std::begin(ignoredNodesPair.first), std::begin(ignoredNodesPair.first));
+        _newUnignoredNodeIDs.insert(std::end(_newUnignoredNodeIDs),
+                                    std::begin(ignoredNodesPair.first), std::end(ignoredNodesPair.first));
+    }
+
+    auto nodeList = DependencyManager::get<NodeList>();
+    for (auto& nodeID : ignoredNodesPair.first) {
+        auto otherNode = nodeList->nodeWithUUID(nodeID);
+        if (otherNode) {
+            auto otherNodeMixerClientData = static_cast<AudioMixerClientData*>(otherNode->getLinkedData());
+            if (otherNodeMixerClientData) {
+                if (ignoredNodesPair.second) {
+                    otherNodeMixerClientData->ignoredByNode(getNodeID());
+                } else {
+                    otherNodeMixerClientData->unignoredByNode(getNodeID());
+                }
+            }
+        }
     }
 }
 
@@ -234,7 +249,7 @@ void AudioMixerClientData::ignoredByNode(QUuid nodeID) {
     _newIgnoringNodeIDs.push_back(nodeID);
 
     // now take a lock and on the consistent vector of ignoring nodes and make sure this node is in it
-    _ignoringNodeIDsMutex.lock();
+    std::lock_guard<std::mutex> lock(_ignoringNodeIDsMutex);
     if (std::find(_ignoringNodeIDs.begin(), _ignoringNodeIDs.end(), nodeID) == _ignoringNodeIDs.end()) {
         _ignoringNodeIDs.push_back(nodeID);
     }
@@ -245,10 +260,14 @@ void AudioMixerClientData::unignoredByNode(QUuid nodeID) {
     _newUnignoringNodeIDs.push_back(nodeID);
 
     // now take a lock on the consistent vector of ignoring nodes and make sure this node isn't in it
-    _ignoringNodeIDsMutex.lock();
-    auto matchingNodeID = std::find(_ignoringNodeIDs.begin(), _ignoringNodeIDs.end(), nodeID);
-    if (matchingNodeID != _ignoringNodeIDs.end()) {
-        _ignoringNodeIDs.erase(matchingNodeID);
+    std::lock_guard<std::mutex> lock(_ignoringNodeIDsMutex);
+    auto it = _ignoringNodeIDs.begin();
+    while (it != _ignoringNodeIDs.end()) {
+        if (*it == nodeID) {
+            it = _ignoringNodeIDs.erase(it);
+        } else {
+            ++it;
+        }
     }
 }
 
@@ -341,6 +360,7 @@ bool AudioMixerClientData::containsValidPosition(ReceivedMessage& message) const
         case PacketType::InjectAudio: {
             // skip the stream ID, stereo flag, and loopback flag
             message.seek(message.getPosition() + NUM_STREAM_ID_BYTES + sizeof(ChannelFlag) + sizeof(LoopbackFlag));
+            break;
         }
         default:
             Q_UNREACHABLE();
