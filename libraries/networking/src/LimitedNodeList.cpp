@@ -96,7 +96,7 @@ LimitedNodeList::LimitedNodeList(int socketListenPort, int dtlsListenPort) :
     _nodeSocket.setPacketFilterOperator(std::bind(&LimitedNodeList::isPacketVerified, this, _1));
 
     // set our socketBelongsToNode method as the connection creation filter operator for the udt::Socket
-    _nodeSocket.setConnectionCreationFilterOperator(std::bind(&LimitedNodeList::sockAddrBelongsToNode, this, _1));
+//    _nodeSocket.setConnectionCreationFilterOperator(std::bind(&LimitedNodeList::sockAddrBelongsToNode, this, _1));
 
     // handle when a socket connection has its receiver side reset - might need to emit clientConnectionToNodeReset
     connect(&_nodeSocket, &udt::Socket::clientHandshakeRequestComplete, this, &LimitedNodeList::clientConnectionToSockAddrReset);

@@ -111,7 +111,7 @@ NodeList::NodeList(char newOwnerType, int socketListenPort, int dtlsListenPort) 
 
     // set our sockAddrBelongsToDomainOrNode method as the connection creation filter for the udt::Socket
     using std::placeholders::_1;
-    _nodeSocket.setConnectionCreationFilterOperator(std::bind(&NodeList::sockAddrBelongsToDomainOrNode, this, _1));
+//    _nodeSocket.setConnectionCreationFilterOperator(std::bind(&NodeList::sockAddrBelongsToDomainOrNode, this, _1));
 
     // we definitely want STUN to update our public socket, so call the LNL to kick that off
     startSTUNPublicSocketUpdate();
