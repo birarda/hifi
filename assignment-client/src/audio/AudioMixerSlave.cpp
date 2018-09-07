@@ -257,22 +257,21 @@ bool AudioMixerSlave::prepareMix(const SharedNodePointer& listener) {
                 it->skippedStream = false;
             }
 
-            // for the two ignore radius checks performed below, we do not push the iterator and move on to the next source
-            // as we do for node-based ignore because radius-based ignores are expected to be temporary
-            // and we want to continue providing the HRTF that will allow it to render the best possible result once re-enabled
-            if (listenerAudioStream->isIgnoreBoxEnabled() &&
-                listenerAudioStream->getIgnoreBox().contains(it->positionalStream->getPosition())) {
-                // the listener is ignoring audio sources within a radius, and this source is in that radius
-                // so we mark it skipped
-                it->skippedStream = true;
-            } else if (it->positionalStream->isIgnoreBoxEnabled() &&
-                       it->positionalStream->getIgnoreBox().contains(listenerAudioStream->getPosition())) {
-                // the source is (bi-directionally) ignoring other audio sources within a radius
-                // and this listener's source is in that radius
-                // so we mark it skipped
-                it->skippedStream = true;
-            } else {
-                it->skippedStream = false;
+            if (!it->skippedStream) {
+                if (listenerAudioStream->isIgnoreBoxEnabled() &&
+                    listenerAudioStream->getIgnoreBox().contains(it->positionalStream->getPosition())) {
+                    // the listener is ignoring audio sources within a radius, and this source is in that radius
+                    // so we mark it skipped
+                    it->skippedStream = true;
+                } else if (it->positionalStream->isIgnoreBoxEnabled() &&
+                           it->positionalStream->getIgnoreBox().contains(listenerAudioStream->getPosition())) {
+                    // the source is (bi-directionally) ignoring other audio sources within a radius
+                    // and this listener's source is in that radius
+                    // so we mark it skipped
+                    it->skippedStream = true;
+                } else {
+                    it->skippedStream = false;
+                }
             }
         }
 
