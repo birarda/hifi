@@ -258,15 +258,9 @@ bool AudioMixerSlave::prepareMix(const SharedNodePointer& listener) {
             }
 
             if (!it->skippedStream) {
-                if (listenerAudioStream->isIgnoreBoxEnabled() &&
-                    listenerAudioStream->getIgnoreBox().contains(it->positionalStream->getPosition())) {
+                if ((listenerAudioStream->isIgnoreBoxEnabled() || it->positionalStream->isIgnoreBoxEnabled())
+                    && listenerAudioStream->getIgnoreBox().touches(it->positionalStream->getIgnoreBox())) {
                     // the listener is ignoring audio sources within a radius, and this source is in that radius
-                    // so we mark it skipped
-                    it->skippedStream = true;
-                } else if (it->positionalStream->isIgnoreBoxEnabled() &&
-                           it->positionalStream->getIgnoreBox().contains(listenerAudioStream->getPosition())) {
-                    // the source is (bi-directionally) ignoring other audio sources within a radius
-                    // and this listener's source is in that radius
                     // so we mark it skipped
                     it->skippedStream = true;
                 } else {
