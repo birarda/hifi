@@ -102,6 +102,8 @@ void AvatarMixerClientData::processSetTraitsMessage(ReceivedMessage& message,
 
     bool anyTraitsChanged = false;
 
+    qDebug() << "Processing a traits packet from" << sendingNode.getUUID();
+
     while (message.getBytesLeftToRead() > 0) {
         // for each trait in the packet, apply it if the trait version is newer than what we have
 

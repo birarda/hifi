@@ -95,6 +95,11 @@ qint64 AvatarMixerSlave::addChangedTraitsToBulkPacket(AvatarMixerClientData* lis
 
     qint64 bytesWritten = 0;
 
+    if (listeningNodeData->getBaseDisplayName() == "birarda") {
+        qDebug() << "Checking" << timeOfLastTraitsChange.time_since_epoch().count() << "vs" << timeOfLastTraitsSent.time_since_epoch().count()
+            << "for" << sendingNodeData->getNodeID() << "to birarda";
+    }
+
     if (timeOfLastTraitsChange > timeOfLastTraitsSent) {
         // there is definitely new traits data to send
 
@@ -115,7 +120,17 @@ qint64 AvatarMixerSlave::addChangedTraitsToBulkPacket(AvatarMixerClientData* lis
             auto lastReceivedVersion = *simpleReceivedIt;
             auto& lastSentVersionRef = lastSentVersions[traitType];
 
+            if (listeningNodeData->getBaseDisplayName() == "birarda") {
+                qDebug() << "Checking" << lastReceivedVersions[traitType] << "vs" << lastSentVersionRef
+                        << "for" << sendingNodeData->getNodeID() << "to birarda";
+            }
+
             if (lastReceivedVersions[traitType] > lastSentVersionRef) {
+
+                if (listeningNodeData->getBaseDisplayName() == "birarda") {
+                    qDebug() << "Sending skeleton for" << sendingNodeData->getNodeID() << "to birarda";
+                }
+
                 // there is an update to this trait, add it to the traits packet
                 bytesWritten += sendingAvatar->packTrait(traitType, traitsPacketList, lastReceivedVersion);
 
@@ -341,6 +356,10 @@ void AvatarMixerSlave::broadcastAvatarDataToAgent(const SharedNodePointer& node)
         // or that has ignored the viewing node
         if ((destinationNode->isIgnoringNodeWithID(avatarNode->getUUID()) && !PALIsOpen)
             || (avatarNode->isIgnoringNodeWithID(destinationNode->getUUID()) && !getsAnyIgnored)) {
+            if (nodeData->getBaseDisplayName() == "birarda") {
+                qDebug() << "Ignore by ID for" << avatarNode->getUUID() << "to birarda";
+            }
+
             shouldIgnore = true;
         } else {
             // Check to see if the space bubble is enabled
@@ -351,6 +370,12 @@ void AvatarMixerSlave::broadcastAvatarDataToAgent(const SharedNodePointer& node)
                 AABox otherNodeBox = computeBubbleBox(avatarClientNodeData->getAvatar(), OTHER_AVATAR_BUBBLE_EXPANSION_FACTOR);
                 if (nodeBox.touches(otherNodeBox)) {
                     nodeData->ignoreOther(destinationNode, avatarNode);
+
+                    if (nodeData->getBaseDisplayName() == "birarda") {
+                        qDebug() << "Ignore by AABox touchy for" << avatarNode->getUUID() << "to birarda";
+                        qDebug() << nodeBox << otherNodeBox;
+                    }
+
                     shouldIgnore = !getsAnyIgnored;
                 }
             }
@@ -376,6 +401,11 @@ void AvatarMixerSlave::broadcastAvatarDataToAgent(const SharedNodePointer& node)
             // or that somehow we haven't sent
             if (lastSeqToReceiver == lastSeqFromSender && lastSeqToReceiver != 0) {
                 ++numAvatarsHeldBack;
+
+                if (nodeData->getBaseDisplayName() == "birarda") {
+                    qDebug() << "Ignore duplicate" << lastSeqFromSender << avatarClientNodeData->getNodeID() << "to birarda";
+                }
+
                 shouldIgnore = true;
             } else if (lastSeqFromSender - lastSeqToReceiver > 1) {
                 // this is a skip - we still send the packet but capture the presence of the skip so we see it happening
@@ -391,6 +421,8 @@ void AvatarMixerSlave::broadcastAvatarDataToAgent(const SharedNodePointer& node)
             auto lastEncodeTime = nodeData->getLastOtherAvatarEncodeTime(avatarNodeData->getSessionUUID());
 
             sortedAvatars.push(SortableAvatar(avatarNodeData, avatarNode, lastEncodeTime));
+        } else if (nodeData->getBaseDisplayName() == "birarda") {
+            qDebug() << "shouldIgnore true for source" << avatarNode->getUUID() << "for birarda";
         }
     }
 
@@ -417,6 +449,9 @@ void AvatarMixerSlave::broadcastAvatarDataToAgent(const SharedNodePointer& node)
                 _stats.overBudgetAvatars++;
                 detail = AvatarData::PALMinimum;
             } else {
+                if (nodeData->getBaseDisplayName() == "birarda") {
+                    qDebug() << "skipping source" << otherNode->getUUID() << "for birarda";
+                }
                 _stats.overBudgetAvatars += remainingAvatars;
                 break;
             }
@@ -504,6 +539,11 @@ void AvatarMixerSlave::broadcastAvatarDataToAgent(const SharedNodePointer& node)
 
                 // increment the number of avatars sent to this reciever
                 nodeData->incrementNumAvatarsSentLastFrame();
+
+                if (nodeData->getBaseDisplayName() == "birarda") {
+                    qDebug() << "Broadcasted" << otherNode->getUUID() << "seq"
+                        << otherNodeData->getLastReceivedSequenceNumber() << "to birarda";
+                }
 
                 // set the last sent sequence number for this sender on the receiver
                 nodeData->setLastBroadcastSequenceNumber(otherNode->getUUID(),

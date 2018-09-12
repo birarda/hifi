@@ -604,6 +604,10 @@ void AvatarMixer::handleAvatarIdentityRequestPacket(QSharedPointer<ReceivedMessa
 
             AvatarMixerClientData* senderData = static_cast<AvatarMixerClientData*>(senderNode->getLinkedData());
             if (senderData) {
+                if (senderData->getBaseDisplayName() == "birarda") {
+                    qDebug() << "Resetting sent trait data for" << requestedNode->getUUID() << "for birarda";
+                }
+
                 senderData->resetSentTraitData(requestedNode->getLocalID());
             }
         }
