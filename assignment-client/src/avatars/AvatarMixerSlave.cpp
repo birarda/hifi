@@ -396,7 +396,7 @@ void AvatarMixerSlave::broadcastAvatarDataToAgent(const SharedNodePointer& node)
 
             // FIXME - This code does appear to be working. But it seems brittle.
             //         It supports determining if the frame of data for this "other"
-            //         avatar has already been sent to the reciever. This has been
+            //         avatar has already been sent to the receiver. This has been
             //         verified to work on a desktop display that renders at 60hz and
             //         therefore sends to mixer at 30hz. Each second you'd expect to
             //         have 15 (45hz-30hz) duplicate frames. In this case, the stat
@@ -533,7 +533,7 @@ void AvatarMixerSlave::broadcastAvatarDataToAgent(const SharedNodePointer& node)
             if (detail != AvatarData::NoData) {
                 _stats.numOthersIncluded++;
 
-                // increment the number of avatars sent to this reciever
+                // increment the number of avatars sent to this receiver
                 nodeData->incrementNumAvatarsSentLastFrame();
 
                 // set the last sent sequence number for this sender on the receiver
@@ -667,14 +667,14 @@ void AvatarMixerSlave::broadcastAvatarDataToDownstreamMixer(const SharedNodePoin
             }
 
             if (avatarByteArray.size() <= maxAvatarByteArraySize) {
-                // increment the number of avatars sent to this reciever
+                // increment the number of avatars sent to this receiver
                 nodeData->incrementNumAvatarsSentLastFrame();
 
                 // set the last sent sequence number for this sender on the receiver
                 nodeData->setLastBroadcastSequenceNumber(agentNode->getUUID(),
                                                          agentNodeData->getLastReceivedSequenceNumber());
 
-                // increment the number of avatars sent to this reciever
+                // increment the number of avatars sent to this receiver
                 nodeData->incrementNumAvatarsSentLastFrame();
 
                 // start a new segment in the packet list for this avatar

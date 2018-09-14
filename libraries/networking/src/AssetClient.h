@@ -66,7 +66,7 @@ public:
 public slots:
     void initCaching();
 
-    void cacheInfoRequest(QObject* reciever, QString slot);
+    void cacheInfoRequest(QObject* receiver, QString slot);
     MiniPromise::Promise cacheInfoRequestAsync(MiniPromise::Promise deferred = nullptr);
     MiniPromise::Promise queryCacheMetaAsync(const QUrl& url, MiniPromise::Promise deferred = nullptr);
     MiniPromise::Promise loadFromCacheAsync(const QUrl& url, MiniPromise::Promise deferred = nullptr);
