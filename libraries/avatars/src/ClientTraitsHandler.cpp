@@ -43,16 +43,26 @@ void ClientTraitsHandler::resetForNewMixer() {
 
     // pre-fill the instanced statuses that we will need to send next frame
     _owningAvatar->prepareResetTraitInstances();
+
+    auto nodeList = DependencyManager::get<NodeList>();
+    qDebug() << "trait resetForNewMixer from" << nodeList->getSessionUUID();
 }
 
 void ClientTraitsHandler::sendChangedTraitsToMixer() {
+
+    auto nodeList = DependencyManager::get<NodeList>();
+
     if (hasChangedTraits() || _shouldPerformInitialSend) {
         // we have at least one changed trait to send
+
+
+        qDebug() << "trait send from" << nodeList->getSessionUUID();
 
         auto nodeList = DependencyManager::get<NodeList>();
         auto avatarMixer = nodeList->soloNodeOfType(NodeType::AvatarMixer);
         if (!avatarMixer || !avatarMixer->getActiveSocket()) {
             // we don't have an avatar mixer with an active socket, we can't send changed traits at this time
+            qDebug() << "trait no active socket from" << nodeList->getSessionUUID();
             return;
         }
 
@@ -77,6 +87,7 @@ void ClientTraitsHandler::sendChangedTraitsToMixer() {
             if (_shouldPerformInitialSend || *simpleIt == Updated) {
                 if (traitType == AvatarTraits::SkeletonModelURL) {
                     _owningAvatar->packTrait(traitType, *traitsPacketList);
+                    qDebug() << "trait skeleton pack from" << nodeList->getSessionUUID();
 
                     // keep track of our skeleton version in case we get an override back
                     _currentSkeletonVersion = _currentTraitVersion;
