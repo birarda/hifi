@@ -428,53 +428,6 @@ void Agent::executeScript() {
             AvatarData::fromFrame(frame->data, *scriptedAvatar);
         });
 
-        using namespace recording;
-        static const FrameType AUDIO_FRAME_TYPE = Frame::registerFrameType(AudioConstants::getAudioFrameName());
-        Frame::registerFrameHandler(AUDIO_FRAME_TYPE, [this, &scriptedAvatar](Frame::ConstPointer frame) {
-            static quint16 audioSequenceNumber{ 0 };
-
-            QByteArray audio(frame->data);
-
-            if (_isNoiseGateEnabled) {
-                int16_t* samples = reinterpret_cast<int16_t*>(audio.data());
-                int numSamples = AudioConstants::NETWORK_FRAME_SAMPLES_PER_CHANNEL;
-                _audioGate.render(samples, samples, numSamples);
-            }
-
-<<<<<<< HEAD
-            computeLoudness(&audio, scriptedAvatar);
-
-            // state machine to detect gate opening and closing
-            bool audioGateOpen = (scriptedAvatar->getAudioLoudness() != 0.0f);
-            bool openedInLastBlock = !_audioGateOpen && audioGateOpen;  // the gate just opened
-            bool closedInLastBlock = _audioGateOpen && !audioGateOpen;  // the gate just closed
-            _audioGateOpen = audioGateOpen;
-            Q_UNUSED(openedInLastBlock);
-
-            // the codec must be flushed to silence before sending silent packets,
-            // so delay the transition to silent packets by one packet after becoming silent.
-            auto packetType = PacketType::MicrophoneAudioNoEcho;
-            if (!audioGateOpen && !closedInLastBlock) {
-                packetType = PacketType::SilentAudioFrame;
-            }
-
-            Transform audioTransform;
-            auto headOrientation = scriptedAvatar->getHeadOrientation();
-            audioTransform.setTranslation(scriptedAvatar->getWorldPosition());
-            audioTransform.setRotation(headOrientation);
-
-            QByteArray encodedBuffer;
-            if (_encoder) {
-                _encoder->encode(audio, encodedBuffer);
-            } else {
-                encodedBuffer = audio;
-            }
-
-            AbstractAudioInterface::emitAudioPacket(encodedBuffer.data(), encodedBuffer.size(), audioSequenceNumber, false,
-                                                    audioTransform, scriptedAvatar->getWorldPosition(), glm::vec3(0),
-                                                    packetType, _selectedCodecName);
-        });
-
         auto avatarHashMap = DependencyManager::set<AvatarHashMap>();
         _scriptEngine->registerGlobalObject("AvatarList", avatarHashMap.data());
 
@@ -486,6 +439,7 @@ void Agent::executeScript() {
 
         QScriptValue webSocketServerConstructorValue = _scriptEngine->newFunction(WebSocketServerClass::constructor);
         _scriptEngine->globalObject().setProperty("WebSocketServer", webSocketServerConstructorValue);
+
 
         auto entityScriptingInterface = DependencyManager::get<EntityScriptingInterface>();
 
@@ -519,7 +473,6 @@ void Agent::executeScript() {
 
         _scriptEngine->run();
 
-        Frame::clearFrameHandler(AUDIO_FRAME_TYPE);
         Frame::clearFrameHandler(AVATAR_FRAME_TYPE);
 
         if (recordingInterface->isPlaying()) {
@@ -530,13 +483,9 @@ void Agent::executeScript() {
             recordingInterface->stopRecording();
         }
 
-<<<<<<< HEAD
         avatarDataTimer->stop();
         _avatarAudioTimer.stop();
     }
-=======
-    Frame::clearFrameHandler(AVATAR_FRAME_TYPE);
->>>>>>> hacked bot for spot with encoder fix and always silent frames
 
     setFinished(true);
 }
