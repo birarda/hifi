@@ -821,6 +821,12 @@ void NodeList::activateSocketFromNodeCommunication(ReceivedMessage& message, con
     // if this is a local or public ping then we can activate a socket
     // we do nothing with agnostic pings, those are simply for timing
     if (pingType == PingType::Local && sendingNode->getActiveSocket() != &sendingNode->getLocalSocket()) {
+        if (sendingNode->getActiveSocket()) {
+            // if we already had an active socket we need to check if there was also a started connection
+            // that should be migrated to the local socket now that we're switching to it
+            _nodeSocket.migrateConnection(*sendingNode->getActiveSocket(), sendingNode->getLocalSocket());
+        }
+
         sendingNode->activateLocalSocket();
     } else if (pingType == PingType::Public && !sendingNode->getActiveSocket()) {
         sendingNode->activatePublicSocket();

@@ -437,6 +437,20 @@ void Connection::updateCongestionControlAndSendQueue(std::function<void ()> cong
     _stats.recordCongestionWindowSize(_congestionControl->_congestionWindowSize);
 }
 
+void Connection::migrateDestination(const HifiSockAddr& newDestination) {
+#ifdef UDT_CONNECTION_DEBUG
+    qCDebug(networking) << "Migrating connection from destination" << _destination << "to" << newDestination;
+#endif
+
+    _destination = newDestination;
+
+    if (_sendQueue) {
+        // invoke a queued call to update the destination for the send queue on its thread
+        QMetaObject::invokeMethod(_sendQueue.get(), "migrateDestination",
+                                  Qt::QueuedConnection, Q_ARG(HifiSockAddr, newDestination));
+    }
+}
+
 void PendingReceivedMessage::enqueuePacket(std::unique_ptr<Packet> packet) {
     Q_ASSERT_X(packet->isPartOfMessage(),
                "PendingReceivedMessage::enqueuePacket",

@@ -509,6 +509,18 @@ void Socket::handleStateChanged(QAbstractSocket::SocketState socketState) {
     }
 }
 
+void Socket::migrateConnection(const HifiSockAddr& previousAddr, const HifiSockAddr& newAddr) {
+    auto it = _connectionsHash.find(previousAddr);
+    if (it != _connectionsHash.end()) {
+        // update the destination for the connection
+        it->second->migrateDestination(newAddr);
+
+        // re-add the connection to the hash under the new socket
+        std::swap(_connectionsHash[newAddr], it->second);
+        _connectionsHash.erase(it);
+    }
+}
+
 #if (PR_BUILD || DEV_BUILD)
 
 void Socket::sendFakedHandshakeRequest(const HifiSockAddr& sockAddr) {

@@ -69,6 +69,7 @@ public:
     ConnectionStats::Stats sampleStats() { return _stats.sample(); }
 
     HifiSockAddr getDestination() const { return _destination; }
+    void migrateDestination(const HifiSockAddr& destination);
 
     void setMaxBandwidth(int maxBandwidth);
 

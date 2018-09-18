@@ -93,6 +93,8 @@ public:
     void sendFakedHandshakeRequest(const HifiSockAddr& sockAddr);
 #endif
 
+    void migrateConnection(const HifiSockAddr& previousAddr, const HifiSockAddr& newAddr);
+
 signals:
     void clientHandshakeRequestComplete(const HifiSockAddr& sockAddr);
     void pendingDatagrams(int datagramCount);
