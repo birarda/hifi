@@ -1193,6 +1193,14 @@ SharedNodePointer LimitedNodeList::findNodeWithAddr(const HifiSockAddr& addr) {
     return (it != std::end(_nodeHash)) ? it->second : SharedNodePointer();
 }
 
+bool LimitedNodeList::sockAddrBelongsToNode(const HifiSockAddr& sockAddr) {
+    QReadLocker locker(&_nodeMutex);
+    auto it = std::find_if(std::begin(_nodeHash), std::end(_nodeHash), [&](const UUIDNodePair& pair) {
+        return pair.second->getLocalSocket() == sockAddr || pair.second->getPublicSocket() == sockAddr;
+    });
+    return (it != std::end(_nodeHash));
+}
+
 void LimitedNodeList::sendPacketToIceServer(PacketType packetType, const HifiSockAddr& iceServerSockAddr,
                                             const QUuid& clientID, const QUuid& peerID) {
     auto icePacket = NLPacket::create(packetType);
