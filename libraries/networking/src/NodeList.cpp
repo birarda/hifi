@@ -829,7 +829,7 @@ void NodeList::activateSocketFromNodeCommunication(ReceivedMessage& message, con
 
         sendingNode->activateLocalSocket();
     } else if (pingType == PingType::Public && !sendingNode->getActiveSocket()) {
-        sendingNode->activatePublicSocket();
+//        sendingNode->activatePublicSocket();
     } else if (pingType == PingType::Symmetric && !sendingNode->getActiveSocket()) {
         sendingNode->activateSymmetricSocket();
     }
