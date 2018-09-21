@@ -260,7 +260,7 @@ bool OpenGLDisplayPlugin::activate() {
         presentThread = DependencyManager::get<PresentThread>();
         presentThread->setObjectName("Presentation Thread");
         if (!widget->context()->makeCurrent()) {
-            throw std::runtime_error("Failed to make context current");
+            //throw std::runtime_error("Failed to make context current");
         }
         CHECK_GL_ERROR();
         widget->context()->doneCurrent();
@@ -909,4 +909,3 @@ void OpenGLDisplayPlugin::copyTextureToQuickFramebuffer(NetworkTexturePointer ne
     });
 #endif
 }
-

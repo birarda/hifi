@@ -58,7 +58,7 @@ QVariant readBinaryArray(QDataStream& in, int& position) {
             arrayData = qUncompress(compressed);
             if (arrayData.isEmpty() ||
                 (unsigned int)arrayData.size() != (sizeof(T) * arrayLength)) { // answers empty byte array if corrupt
-                throw QString("corrupt fbx file");
+                //throw QString("corrupt fbx file");
             }
         } else {
             arrayData.resize(sizeof(T) * arrayLength);
@@ -79,7 +79,7 @@ QVariant readBinaryArray(QDataStream& in, int& position) {
             position += compressedLength;
             QByteArray uncompressed = qUncompress(compressed);
             if (uncompressed.isEmpty()) { // answers empty byte array if corrupt
-                throw QString("corrupt fbx file");
+                //throw QString("corrupt fbx file");
             }
             QDataStream uncompressedIn(uncompressed);
             uncompressedIn.setByteOrder(QDataStream::LittleEndian);
@@ -165,7 +165,8 @@ QVariant parseBinaryFBXProperty(QDataStream& in, int& position) {
             return QVariant::fromValue(in.device()->read(length));
         }
         default:
-            throw QString("Unknown property type: ") + ch;
+            Q_UNREACHABLE();
+            //throw QString("Unknown property type: ") + ch;
     }
 }
 
@@ -177,7 +178,7 @@ FBXNode parseBinaryFBXNode(QDataStream& in, int& position, bool has64BitPosition
 
     // FBX 2016 and beyond uses 64bit positions in the node headers, pre-2016 used 32bit values
     // our code generally doesn't care about the size that much, so we will use 64bit values
-    // from here on out, but if the file is an older format we read the stream into temp 32bit 
+    // from here on out, but if the file is an older format we read the stream into temp 32bit
     // values and then assign to our actual 64bit values.
     if (has64BitPositions) {
         in >> endOffset;
@@ -329,8 +330,8 @@ FBXNode parseTextFBXNode(Tokenizer& tokenizer) {
             if ((token = tokenizer.nextToken()) == ':') {
                 tokenizer.ungetChar(':');
                 tokenizer.pushBackToken(Tokenizer::DATUM_TOKEN);
-                return node;    
-                
+                return node;
+
             } else {
                 tokenizer.pushBackToken(token);
                 node.properties.append(datum);
@@ -517,4 +518,3 @@ QVector<double> FBXReader::getDoubleVector(const FBXNode& node) {
     }
     return vector;
 }
-

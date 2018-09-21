@@ -155,5 +155,5 @@ FrameConstPointer PointerClip::readFrame(size_t frameIndex) const {
 }
 
 void PointerClip::addFrame(FrameConstPointer) {
-    throw std::runtime_error("Pointer clips are read only, use duplicate to create a read/write clip");
+    // throw std::runtime_error("Pointer clips are read only, use duplicate to create a read/write clip");
 }

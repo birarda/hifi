@@ -64,9 +64,9 @@ void AnimationReader::run() {
         originalPriority = QThread::NormalPriority;
     }
     QThread::currentThread()->setPriority(QThread::LowPriority);
-    try {
+    // try {
         if (_data.isEmpty()) {
-            throw QString("Reply is NULL ?!");
+            // throw QString("Reply is NULL ?!");
         }
         QString urlname = _url.path().toLower();
         bool urlValid = true;
@@ -84,12 +84,12 @@ void AnimationReader::run() {
             }
             emit onSuccess(fbxgeo);
         } else {
-            throw QString("url is invalid");
+            // throw QString("url is invalid");
         }
 
-    } catch (const QString& error) {
-        emit onError(299, error);
-    }
+    // } catch (const QString& error) {
+    //     emit onError(299, error);
+    // }
     QThread::currentThread()->setPriority(originalPriority);
 }
 
@@ -152,4 +152,3 @@ void Animation::animationParseError(int error, QString str) {
     emit failed(QNetworkReply::UnknownContentError);
     finishedLoading(false);
 }
-

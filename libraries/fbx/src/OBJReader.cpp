@@ -15,7 +15,7 @@
 #include "OBJReader.h"
 
 #include <ctype.h>  // .obj files are not locale-specific. The C/ASCII charset applies.
-#include <sstream> 
+#include <sstream>
 
 #include <QtCore/QBuffer>
 #include <QtCore/QIODevice>
@@ -45,7 +45,7 @@ namespace {
 template<class T>
 T& checked_at(QVector<T>& vector, int i) {
     if (i < 0 || i >= vector.size()) {
-        throw std::out_of_range("index " + std::to_string(i) + "is out of range");
+        //throw std::out_of_range("index " + std::to_string(i) + "is out of range");
     }
     return vector[i];
 }
@@ -263,16 +263,16 @@ void OBJReader::parseMaterialLibrary(QIODevice* device) {
             default:
                 materials[matName] = currentMaterial;
                 #ifdef WANT_DEBUG
-                qCDebug(modelformat) << 
+                qCDebug(modelformat) <<
                                      "OBJ Reader Last material illumination model:" << currentMaterial.illuminationModel <<
-                                     " shininess:" << currentMaterial.shininess << 
+                                     " shininess:" << currentMaterial.shininess <<
                                      " opacity:" << currentMaterial.opacity <<
-                                     " diffuse color:" << currentMaterial.diffuseColor << 
-                                     " specular color:" << currentMaterial.specularColor << 
-                                     " emissive color:" << currentMaterial.emissiveColor << 
-                                     " diffuse texture:" << currentMaterial.diffuseTextureFilename << 
-                                     " specular texture:" << currentMaterial.specularTextureFilename << 
-                                     " emissive texture:" << currentMaterial.emissiveTextureFilename << 
+                                     " diffuse color:" << currentMaterial.diffuseColor <<
+                                     " specular color:" << currentMaterial.specularColor <<
+                                     " emissive color:" << currentMaterial.emissiveColor <<
+                                     " diffuse texture:" << currentMaterial.diffuseTextureFilename <<
+                                     " specular texture:" << currentMaterial.specularTextureFilename <<
+                                     " emissive texture:" << currentMaterial.emissiveTextureFilename <<
                                      " bump texture:" << currentMaterial.bumpTextureFilename <<
                                      " opacity texture:" << currentMaterial.opacityTextureFilename;
 #endif
@@ -352,7 +352,7 @@ void OBJReader::parseMaterialLibrary(QIODevice* device) {
             }
         }
     }
-} 
+}
 
 void OBJReader::parseTextureLine(const QByteArray& textureLine, QByteArray& filename, OBJMaterialTextureOptions& textureOptions) {
     // Texture options reference http://paulbourke.net/dataformats/mtl/
@@ -667,7 +667,7 @@ FBXGeometry::Pointer OBJReader::readOBJ(QByteArray& model, const QVariantHash& m
     geometry.meshExtents.reset();
     geometry.meshes.append(FBXMesh());
 
-    try {
+    // try {
         // call parseOBJGroup as long as it's returning true.  Each successful call will
         // add a new meshPart to the geometry's single mesh.
         while (parseOBJGroup(tokenizer, mapping, geometry, scaleGuess, combineParts)) {}
@@ -793,7 +793,7 @@ FBXGeometry::Pointer OBJReader::readOBJ(QByteArray& model, const QVariantHash& m
                     n0 = checked_at(normals, face.normalIndices[0]);
                     n1 = checked_at(normals, face.normalIndices[1]);
                     n2 = checked_at(normals, face.normalIndices[2]);
-                } else { 
+                } else {
                     // generate normals from triangle plane if not provided
                     n0 = n1 = n2 = glm::cross(v1 - v0, v2 - v0);
                 }
@@ -824,9 +824,9 @@ FBXGeometry::Pointer OBJReader::readOBJ(QByteArray& model, const QVariantHash& m
         FBXReader::buildModelMesh(mesh, url.toString());
 
         // fbxDebugDump(geometry);
-    } catch(const std::exception& e) {
-        qCDebug(modelformat) << "OBJ reader fail: " << e.what();
-    }
+    // } catch(const std::exception& e) {
+    //     qCDebug(modelformat) << "OBJ reader fail: " << e.what();
+    // }
 
     QString queryPart = _url.query();
     bool suppressMaterialsHack = queryPart.contains("hifiusemat"); // If this appears in query string, don't fetch mtl even if used.
@@ -923,7 +923,7 @@ FBXGeometry::Pointer OBJReader::readOBJ(QByteArray& model, const QVariantHash& m
         bool applyNonMetallic = false;
         bool fresnelOn = false;
 
-        // Illumination model reference http://paulbourke.net/dataformats/mtl/ 
+        // Illumination model reference http://paulbourke.net/dataformats/mtl/
         switch (objMaterial.illuminationModel) {
             case 0: // Color on and Ambient off
                 // We don't support ambient = do nothing?
@@ -967,7 +967,7 @@ FBXGeometry::Pointer OBJReader::readOBJ(QByteArray& model, const QVariantHash& m
             case 10: // Casts shadows onto invisible surfaces
                 // Do nothing?
                 break;
-        }      
+        }
 
         if (applyTransparency) {
             fbxMaterial.opacity = std::max(fbxMaterial.opacity, ILLUMINATION_MODEL_MIN_OPACITY);

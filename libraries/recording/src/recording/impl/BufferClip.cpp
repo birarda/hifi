@@ -22,7 +22,7 @@ QString BufferClip::getName() const {
 
 void BufferClip::addFrame(FrameConstPointer newFrame) {
     if (newFrame->timeOffset < 0.0f) {
-        throw std::runtime_error("Frames may not have negative time offsets");
+        // throw std::runtime_error("Frames may not have negative time offsets");
     }
 
     Locker lock(_mutex);

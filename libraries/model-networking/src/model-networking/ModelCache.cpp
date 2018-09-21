@@ -182,7 +182,7 @@ void GeometryReader::run() {
 
     try {
         if (_data.isEmpty()) {
-            throw QString("reply is NULL");
+            // throw QString("reply is NULL");
         }
 
         QString urlname = _url.path().toLower();
@@ -198,7 +198,7 @@ void GeometryReader::run() {
             if (_url.path().toLower().endsWith(".fbx")) {
                 fbxGeometry.reset(readFBX(_data, _mapping, _url.path()));
                 if (fbxGeometry->meshes.size() == 0 && fbxGeometry->joints.size() == 0) {
-                    throw QString("empty geometry, possibly due to an unsupported FBX version");
+                    // throw QString("empty geometry, possibly due to an unsupported FBX version");
                 }
             } else if (_url.path().toLower().endsWith(".obj")) {
                 fbxGeometry = OBJReader().readOBJ(_data, _mapping, _combineParts, _url);
@@ -207,17 +207,17 @@ void GeometryReader::run() {
                 if (gunzip(_data, uncompressedData)){
                     fbxGeometry = OBJReader().readOBJ(uncompressedData, _mapping, _combineParts, _url);
                 } else {
-                    throw QString("failed to decompress .obj.gz");
+                    // throw QString("failed to decompress .obj.gz");
                 }
 
             } else if (_url.path().toLower().endsWith(".gltf")) {
                 std::shared_ptr<GLTFReader> glreader = std::make_shared<GLTFReader>();
                 fbxGeometry.reset(glreader->readGLTF(_data, _mapping, _url));
                 if (fbxGeometry->meshes.size() == 0 && fbxGeometry->joints.size() == 0) {
-                    throw QString("empty geometry, possibly due to an unsupported GLTF version");
+                    // throw QString("empty geometry, possibly due to an unsupported GLTF version");
                 }
             } else {
-                throw QString("unsupported format");
+                // throw QString("unsupported format");
             }
 
             // Add scripts to fbxgeometry
@@ -237,7 +237,7 @@ void GeometryReader::run() {
                     Q_ARG(FBXGeometry::Pointer, fbxGeometry));
             }
         } else {
-            throw QString("url is invalid");
+            // throw QString("url is invalid");
         }
     } catch (const QString& error) {
 
@@ -389,7 +389,7 @@ void Geometry::setTextures(const QVariantMap& textureMap) {
         for (auto& material : _materials) {
             // Check if any material textures actually changed
             if (std::any_of(material->_textures.cbegin(), material->_textures.cend(),
-                [&textureMap](const NetworkMaterial::Textures::value_type& it) { return it.texture && textureMap.contains(it.name); })) { 
+                [&textureMap](const NetworkMaterial::Textures::value_type& it) { return it.texture && textureMap.contains(it.name); })) {
 
                 // FIXME: The Model currently caches the materials (waste of space!)
                 //        so they must be copied in the Geometry copy-ctor
@@ -415,12 +415,12 @@ bool Geometry::areTexturesLoaded() const {
         for (auto& material : _materials) {
             // Check if material textures are loaded
             bool materialMissingTexture = std::any_of(material->_textures.cbegin(), material->_textures.cend(),
-                [](const NetworkMaterial::Textures::value_type& it) { 
+                [](const NetworkMaterial::Textures::value_type& it) {
                 auto texture = it.texture;
                 if (!texture) {
                     return false;
                 }
-                // Failed texture downloads need to be considered as 'loaded' 
+                // Failed texture downloads need to be considered as 'loaded'
                 // or the object will never fade in
                 bool finished = texture->isFailed() || (texture->isLoaded() && texture->getGPUTexture() && texture->getGPUTexture()->isDefined());
                 if (!finished) {

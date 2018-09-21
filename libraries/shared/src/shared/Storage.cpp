@@ -50,19 +50,19 @@ MemoryStorage::MemoryStorage(size_t size, const uint8_t* data) {
 StoragePointer FileStorage::create(const QString& filename, size_t size, const uint8_t* data) {
     QFile file(filename);
     if (!file.open(QFile::ReadWrite | QIODevice::Truncate)) {
-        throw std::runtime_error("Unable to open file for writing");
+        // throw std::runtime_error("Unable to open file for writing");
     }
     if (!file.resize(size)) {
-        throw std::runtime_error("Unable to resize file");
+        // throw std::runtime_error("Unable to resize file");
     }
     if (data) {
         auto mapped = file.map(0, size);
         if (!mapped) {
-            throw std::runtime_error("Unable to map file");
+            // throw std::runtime_error("Unable to map file");
         }
         memcpy(mapped, data, size);
         if (!file.unmap(mapped)) {
-            throw std::runtime_error("Unable to unmap file");
+            // throw std::runtime_error("Unable to unmap file");
         }
     }
     file.close();

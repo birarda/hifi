@@ -47,7 +47,7 @@ void WrapperClip::reset() {
 }
 
 void WrapperClip::addFrame(FrameConstPointer) {
-    throw std::runtime_error("Wrapper clips are read only");
+    // throw std::runtime_error("Wrapper clips are read only");
 }
 
 float WrapperClip::duration() const {
@@ -57,4 +57,3 @@ float WrapperClip::duration() const {
 size_t WrapperClip::frameCount() const {
     return _wrappedClip->frameCount();
 }
-

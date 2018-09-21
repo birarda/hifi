@@ -186,7 +186,7 @@ void FBXWriter::encodeFBXProperty(QDataStream& out, const QVariant& prop) {
                 writeVector(out, 'b', prop.value<QVector<bool>>());
             } else {
                 qDebug() << "Unsupported property type in FBXWriter::encodeNode: " << type << prop;
-                throw("Unsupported property type in FBXWriter::encodeNode: " + QString::number(type) + " " + prop.toString());
+                //throw("Unsupported property type in FBXWriter::encodeNode: " + QString::number(type) + " " + prop.toString());
             }
         }
 

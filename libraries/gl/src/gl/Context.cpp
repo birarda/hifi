@@ -151,7 +151,7 @@ static void debugMessageCallback(GLenum source, GLenum type, GLuint id, GLenum s
 }
 
 static void setupPixelFormatSimple(HDC hdc) {
-    // FIXME build the PFD based on the 
+    // FIXME build the PFD based on the
     static const PIXELFORMATDESCRIPTOR pfd =    // pfd Tells Windows How We Want Things To Be
     {
         sizeof(PIXELFORMATDESCRIPTOR),         // Size Of This Pixel Format Descriptor
@@ -166,7 +166,7 @@ static void setupPixelFormatSimple(HDC hdc) {
         0,                                      // Shift Bit Ignored
         0,                                      // No Accumulation Buffer
         0, 0, 0, 0,                             // Accumulation Bits Ignored
-        24,                                     // 24 Bit Z-Buffer (Depth Buffer)  
+        24,                                     // 24 Bit Z-Buffer (Depth Buffer)
         8,                                      // 8 Bit Stencil Buffer
         0,                                      // No Auxiliary Buffer
         PFD_MAIN_PLANE,                         // Main Drawing Layer
@@ -175,11 +175,11 @@ static void setupPixelFormatSimple(HDC hdc) {
     };
     auto pixelFormat = ChoosePixelFormat(hdc, &pfd);
     if (pixelFormat == 0) {
-        throw std::runtime_error("Unable to create initial context");
+        //throw std::runtime_error("Unable to create initial context");
     }
 
     if (SetPixelFormat(hdc, pixelFormat, &pfd) == FALSE) {
-        throw std::runtime_error("Unable to create initial context");
+        //throw std::runtime_error("Unable to create initial context");
     }
 }
 
@@ -257,7 +257,7 @@ void Context::create() {
         BOOL makeCurrentResult;
         makeCurrentResult = wglMakeCurrent(hdc, glrc);
         if (!makeCurrentResult) {
-            throw std::runtime_error("Unable to create initial context");
+            //throw std::runtime_error("Unable to create initial context");
         }
         gl::initModuleGl();
         wglMakeCurrent(0, 0);
@@ -343,7 +343,7 @@ void Context::create() {
     }
 
     if (_hglrc == 0) {
-        throw std::runtime_error("Could not create GL context");
+        //throw std::runtime_error("Could not create GL context");
     }
 
     if (!PRIMARY) {
@@ -352,7 +352,7 @@ void Context::create() {
     }
 
     if (!makeCurrent()) {
-        throw std::runtime_error("Could not make context current");
+        //throw std::runtime_error("Could not make context current");
     }
     if (enableDebugLogger()) {
         glDebugMessageCallback(debugMessageCallback, NULL);

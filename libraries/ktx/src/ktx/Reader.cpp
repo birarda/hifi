@@ -43,14 +43,14 @@ namespace ktx {
             }
             break;
         default:
-            throw ReaderException("endianness field has invalid value");
+            // throw ReaderException("endianness field has invalid value");
             return false;
         }
     }
 
     bool checkIdentifier(const Byte* identifier) {
         if (!(0 == memcmp(identifier, Header::IDENTIFIER.data(), Header::IDENTIFIER_LENGTH))) {
-            throw ReaderException("identifier field invalid");
+            // throw ReaderException("identifier field invalid");
             return false;
         }
         return true;
@@ -74,13 +74,13 @@ namespace ktx {
 
             // TODO: calculated bytesOfTexData
             if (srcSize < (sizeof(Header) + header->bytesOfKeyValueData)) {
-                throw ReaderException("length is too short for metadata");
+                // throw ReaderException("length is too short for metadata");
             }
 
              size_t bytesOfTexData = 0;
             if (srcSize < (sizeof(Header) + header->bytesOfKeyValueData + bytesOfTexData)) {
 
-                throw ReaderException("length is too short for data");
+                // throw ReaderException("length is too short for data");
             }
 
             return true;
@@ -95,7 +95,7 @@ namespace ktx {
         uint32_t keyAndValueByteSize;
         memcpy(&keyAndValueByteSize, srcBytes, sizeof(uint32_t));
         if (keyAndValueByteSize + sizeof(uint32_t) > srcSize) {
-            throw ReaderException("invalid key-value size");
+            // throw ReaderException("invalid key-value size");
         }
         auto keyValueBytes = srcBytes + sizeof(uint32_t);
 
@@ -104,7 +104,7 @@ namespace ktx {
         while (reinterpret_cast<const char*>(keyValueBytes)[++keyLength] != '\0') {
             if (keyLength == keyAndValueByteSize) {
                 // key must be null-terminated, and there must be space for the value
-                throw ReaderException("invalid key-value " + std::string(reinterpret_cast<const char*>(keyValueBytes), keyLength));
+                // throw ReaderException("invalid key-value " + std::string(reinterpret_cast<const char*>(keyValueBytes), keyLength));
             }
         }
         uint32_t valueStartOffset = keyLength + 1;

@@ -166,7 +166,7 @@ namespace ktx {
     uint32_t KeyValue::writeSerializedKeyAndValue(Byte* destBytes, uint32_t destByteSize, const KeyValue& keyval) {
         uint32_t keyvalSize = keyval.serializedByteSize();
         if (keyvalSize > destByteSize) {
-            throw WriterException("invalid key-value size");
+            //throw WriterException("invalid key-value size");
         }
 
         *((uint32_t*) destBytes) = keyval._byteSize;
@@ -184,17 +184,17 @@ namespace ktx {
 
     size_t KTX::writeKeyValues(Byte* destBytes, size_t destByteSize, const KeyValues& keyValues) {
         size_t writtenByteSize = 0;
-        try {
+        // try {
             auto dest = destBytes;
             for (auto& keyval : keyValues) {
                 size_t keyvalSize = KeyValue::writeSerializedKeyAndValue(dest, (uint32_t) (destByteSize - writtenByteSize), keyval);
                 writtenByteSize += keyvalSize;
                 dest += keyvalSize;
             }
-        }
-        catch (const WriterException& e) {
-            qWarning() << e.what();
-        }
+        // }
+        // catch (const WriterException& e) {
+        //     qWarning() << e.what();
+        // }
         return writtenByteSize;
     }
 
@@ -242,7 +242,7 @@ namespace ktx {
                 }
             }
         }
-           
+
         return destImages;
     }
 
