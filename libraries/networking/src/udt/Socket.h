@@ -14,13 +14,17 @@
 #ifndef hifi_Socket_h
 #define hifi_Socket_h
 
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <unistd.h>
+
 #include <functional>
 #include <unordered_map>
 #include <mutex>
 
 #include <QtCore/QObject>
 #include <QtCore/QTimer>
-#include <QtNetwork/QUdpSocket>
 
 #include <tbb/concurrent_queue.h>
 
@@ -60,19 +64,15 @@ class PacketReciever : public QObject {
     Q_OBJECT
 
 public:
-    PacketReciever(QUdpSocket& socket,
-                   tbb::concurrent_queue<Datagram>& incomingDatagrams);
+    PacketReciever(tbb::concurrent_queue<Datagram>& incomingDatagrams);
 
-public slots:
-    void readPendingDatagrams();
+    void run(int fd);
 
 signals:
     void pendingDatagrams(int datagramCount);
 
 private:
-    QUdpSocket& _socket;
     tbb::concurrent_queue<Datagram>& _incomingDatagrams;
-    int _maxDatagramsRead { 0 };
 };
 
 class Socket : public QObject {
@@ -87,7 +87,7 @@ public:
     Socket(QObject* object = 0, bool shouldChangeSocketOptions = true);
     ~Socket();
     
-    quint16 localPort() const { return _udpSocket.localPort(); }
+    quint16 localPort() const { return _localPort; }
     
     // Simple functions writing to the socket with no processing
     qint64 writeBasePacket(const BasePacket& packet, const HifiSockAddr& sockAddr);
@@ -132,7 +132,6 @@ public slots:
     
 private slots:
     void processPendingDatagrams(int datagramCount);
-    void checkForReadyReadBackup();
 
     void handleSocketError(QAbstractSocket::SocketError socketError);
     void handleStateChanged(QAbstractSocket::SocketState socketState);
@@ -151,7 +150,9 @@ private:
     Q_INVOKABLE void writeReliablePacket(Packet* packet, const HifiSockAddr& sockAddr);
     Q_INVOKABLE void writeReliablePacketList(PacketList* packetList, const HifiSockAddr& sockAddr);
 
-    QUdpSocket _udpSocket;
+    int _sockFD;
+    uint16_t _localPort;
+
     PacketFilterOperator _packetFilterOperator;
     PacketHandler _packetHandler;
     MessageHandler _messageHandler;
@@ -163,8 +164,6 @@ private:
     std::unordered_map<HifiSockAddr, BasePacketHandler> _unfilteredHandlers;
     std::unordered_map<HifiSockAddr, SequenceNumber> _unreliableSequenceNumbers;
     std::unordered_map<HifiSockAddr, std::unique_ptr<Connection>> _connectionsHash;
-
-    QTimer* _readyReadBackupTimer { nullptr };
 
     int _maxBandwidth { -1 };
 
@@ -182,7 +181,7 @@ private:
     
     friend UDTTest;
 };
-    
+
 } // namespace udt
 
 #endif // hifi_Socket_h
