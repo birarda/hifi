@@ -297,7 +297,15 @@ namespace AvatarDataPacket {
     const size_t FAR_GRAB_JOINTS_SIZE = 84;
     static_assert(sizeof(FarGrabJoints) == FAR_GRAB_JOINTS_SIZE, "AvatarDataPacket::FarGrabJoints size doesn't match.");
 
-    const size_t MIN_BULK_PACKET_SIZE = NUM_BYTES_RFC4122_UUID + HEADER_SIZE;
+    static const size_t MIN_BULK_PACKET_SIZE = NUM_BYTES_RFC4122_UUID + HEADER_SIZE;
+    static const size_t FAUX_JOINTS_SIZE = 2 * (sizeof(SixByteQuat) + sizeof(SixByteTrans));
+
+    struct SendStatus {
+        HasFlags itemFlags { 0 };
+        int rotationsSent { 0 };  // ie: index of next unsent joint
+        int translationsSent { 0 };
+        operator bool() { return itemFlags == 0; }
+    };
 }
 
 const float MAX_AUDIO_LOUDNESS = 1000.0f; // close enough for mouth animation
@@ -451,7 +459,7 @@ public:
     virtual QByteArray toByteArrayStateful(AvatarDataDetail dataDetail, bool dropFaceTracking = false);
 
     virtual QByteArray toByteArray(AvatarDataDetail dataDetail, quint64 lastSentTime, const QVector<JointData>& lastSentJointData,
-        AvatarDataPacket::HasFlags& hasFlagsOut, bool dropFaceTracking, bool distanceAdjust, glm::vec3 viewerPosition,
+        AvatarDataPacket::SendStatus& sendStatus, bool dropFaceTracking, bool distanceAdjust, glm::vec3 viewerPosition,
         QVector<JointData>* sentJointDataOut, int maxDataSize = 0, AvatarDataRate* outboundDataRateOut = nullptr) const;
 
     virtual void doneEncoding(bool cullSmallChanges);
@@ -1445,6 +1453,8 @@ protected:
     ThreadSafeValueCache<glm::mat4> _farGrabRightMatrixCache { glm::mat4() };
     ThreadSafeValueCache<glm::mat4> _farGrabLeftMatrixCache { glm::mat4() };
     ThreadSafeValueCache<glm::mat4> _farGrabMouseMatrixCache { glm::mat4() };
+
+    ThreadSafeValueCache<QVariantMap> _collisionCapsuleCache{ QVariantMap() };
 
     int getFauxJointIndex(const QString& name) const;
 
