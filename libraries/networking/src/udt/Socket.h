@@ -48,7 +48,7 @@ class BasePacket;
 class Packet;
 class PacketList;
 class SequenceNumber;
-class PacketReciever;
+class DatagramReceiver;
 
 using PacketFilterOperator = std::function<bool(const Packet&)>;
 using ConnectionCreationFilterOperator = std::function<bool(const HifiSockAddr&)>;
@@ -66,11 +66,12 @@ struct Datagram {
     p_high_resolution_clock::time_point _receiveTime;
 };
 
-class PacketReciever : public QObject {
+class DatagramReceiver : public QObject {
     Q_OBJECT
 
 public:
-    PacketReciever(tbb::concurrent_queue<Datagram>& incomingDatagrams);
+    DatagramReceiver(tbb::concurrent_queue<Datagram>& incomingDatagrams,
+                     std::atomic_bool& waitingForPackets);
 
     void run(int fd);
 
@@ -79,6 +80,7 @@ signals:
 
 private:
     tbb::concurrent_queue<Datagram>& _incomingDatagrams;
+    std::atomic_bool& _waitingForPackets;
 };
 
 class Socket : public QObject {
@@ -185,8 +187,9 @@ private:
     HifiSockAddr _lastPacketSockAddr;
 
     tbb::concurrent_queue<Datagram> _incomingDatagrams;
+    std::atomic_bool _waitingForPackets { true };
 
-    PacketReciever _packetReciever;
+    DatagramReceiver _datagramReceiver;
     
     friend UDTTest;
 };

@@ -34,12 +34,14 @@
 
 using namespace udt;
 
-PacketReciever::PacketReciever(tbb::concurrent_queue<Datagram>& incomingDatagrams)
+DatagramReceiver::DatagramReceiver(tbb::concurrent_queue<Datagram>& incomingDatagrams,
+                                   std::atomic_bool& waitingForPackets)
     : _incomingDatagrams(incomingDatagrams)
+    , _waitingForPackets(waitingForPackets)
 {
 }
 
-void PacketReciever::run(int fd) {
+void DatagramReceiver::run(int fd) {
     while (!thread()->isInterruptionRequested()) {
         static const int MAX_SIZE = 2048;
         // setup a buffer to read the packet into
@@ -73,7 +75,10 @@ void PacketReciever::run(int fd) {
             _incomingDatagrams.push({ senderAddress, senderPort, (int)size,
                 std::move(buffer), receiveTime });
 
-            emit pendingDatagrams(1);
+            bool shouldBe = true;
+            if (_waitingForPackets.compare_exchange_strong(shouldBe, false)) {
+                emit pendingDatagrams(1);
+            }
         }
 
         QCoreApplication::processEvents();
@@ -85,7 +90,7 @@ void PacketReciever::run(int fd) {
 Socket::Socket(QObject* parent, bool shouldChangeSocketOptions) :
     QObject(parent),
     _shouldChangeSocketOptions(shouldChangeSocketOptions),
-    _packetReciever(_incomingDatagrams)
+    _datagramReceiver(_incomingDatagrams, _waitingForPackets)
 {
 #ifdef Q_OS_WIN
     WSADATA wsaData;
@@ -108,11 +113,11 @@ Socket::Socket(QObject* parent, bool shouldChangeSocketOptions) :
     }
 #endif
 
-    moveToNewNamedThread(&_packetReciever, "PacketReciever", [this] {
-        _packetReciever.run(_sockFD);
+    moveToNewNamedThread(&_datagramReceiver, "DatagramReceiver", [this] {
+        _datagramReceiver.run(_sockFD);
     }, QThread::TimeCriticalPriority);
 
-    connect(&_packetReciever, &PacketReciever::pendingDatagrams, this, &Socket::processPendingDatagrams);
+    connect(&_datagramReceiver, &DatagramReceiver::pendingDatagrams, this, &Socket::processPendingDatagrams);
 
     // make sure we hear about errors and state changes from the underlying socket
 //    connect(&_udpSocket, SIGNAL(error(QAbstractSocket::SocketError)),
@@ -121,7 +126,7 @@ Socket::Socket(QObject* parent, bool shouldChangeSocketOptions) :
 }
 
 Socket::~Socket() {
-    _packetReciever.thread()->requestInterruption();
+    _datagramReceiver.thread()->requestInterruption();
 #ifdef Q_OS_WIN
     ::closesocket(_sockFD);
     WSACleanup();
@@ -162,7 +167,7 @@ void Socket::bind(const QHostAddress& address, quint16 port) {
 }
 
 void Socket::rebind(quint16 localPort) {
-    _packetReciever.thread()->requestInterruption();
+    _datagramReceiver.thread()->requestInterruption();
 #ifdef Q_OS_WIN
     ::closesocket(_sockFD);
     _sockFD = socket(AF_INET, SOCK_DGRAM, 0);
@@ -179,8 +184,8 @@ void Socket::rebind(quint16 localPort) {
         assert(false);
     }
 #endif
-    moveToNewNamedThread(&_packetReciever, "PacketReciever", [this] {
-        _packetReciever.run(_sockFD);
+    moveToNewNamedThread(&_datagramReceiver, "DatagramReceiver", [this] {
+        _datagramReceiver.run(_sockFD);
     }, QThread::TimeCriticalPriority);
     bind(QHostAddress::AnyIPv4, localPort);
 }
@@ -480,6 +485,9 @@ void Socket::processPendingDatagrams(int) {
             }
         }
     }
+
+    assert(_waitingForPackets.load() == false);
+    _waitingForPackets.store(true);
 }
 
 void Socket::connectToSendSignal(const HifiSockAddr& destinationAddr, QObject* receiver, const char* slot) {

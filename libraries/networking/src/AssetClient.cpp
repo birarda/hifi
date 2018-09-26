@@ -246,16 +246,16 @@ MiniPromise::Promise AssetClient::saveToCacheAsync(const QUrl& url, const QByteA
     return deferred;
 }
 
-void AssetClient::cacheInfoRequest(QObject* reciever, QString slot) {
+void AssetClient::cacheInfoRequest(QObject* receiver, QString slot) {
     if (QThread::currentThread() != thread()) {
         QMetaObject::invokeMethod(this, "cacheInfoRequest", Qt::QueuedConnection,
-                                  Q_ARG(QObject*, reciever), Q_ARG(QString, slot));
+                                  Q_ARG(QObject*, receiver), Q_ARG(QString, slot));
         return;
     }
 
 
     if (auto* cache = qobject_cast<QNetworkDiskCache*>(NetworkAccessManager::getInstance().cache())) {
-        QMetaObject::invokeMethod(reciever, slot.toStdString().data(), Qt::QueuedConnection,
+        QMetaObject::invokeMethod(receiver, slot.toStdString().data(), Qt::QueuedConnection,
                                   Q_ARG(QString, cache->cacheDirectory()),
                                   Q_ARG(qint64, cache->cacheSize()),
                                   Q_ARG(qint64, cache->maximumCacheSize()));
