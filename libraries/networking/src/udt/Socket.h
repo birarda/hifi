@@ -14,10 +14,16 @@
 #ifndef hifi_Socket_h
 #define hifi_Socket_h
 
+#include <qglobal.h>
+
+#ifdef Q_OS_WIN
+#include <winsock2.h>
+#else
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <unistd.h>
+#endif
 
 #include <functional>
 #include <unordered_map>
@@ -99,7 +105,6 @@ public:
     
     void bind(const QHostAddress& address, quint16 port = 0);
     void rebind(quint16 port);
-    void rebind();
 
     void setPacketFilterOperator(PacketFilterOperator filterOperator) { _packetFilterOperator = filterOperator; }
     void setPacketHandler(PacketHandler handler) { _packetHandler = handler; }
@@ -140,17 +145,21 @@ private:
     void setSystemBufferSizes();
     Connection* findOrCreateConnection(const HifiSockAddr& sockAddr);
     bool socketMatchesNodeOrDomain(const HifiSockAddr& sockAddr);
-   
+
     // privatized methods used by UDTTest - they are private since they must be called on the Socket thread
     ConnectionStats::Stats sampleStatsForConnection(const HifiSockAddr& destination);
-    
+
     std::vector<HifiSockAddr> getConnectionSockAddrs();
     void connectToSendSignal(const HifiSockAddr& destinationAddr, QObject* receiver, const char* slot);
-    
+
     Q_INVOKABLE void writeReliablePacket(Packet* packet, const HifiSockAddr& sockAddr);
     Q_INVOKABLE void writeReliablePacketList(PacketList* packetList, const HifiSockAddr& sockAddr);
 
-    int _sockFD;
+#ifdef Q_OS_WIN
+    SOCKET _sockFD { INVALID_SOCKET };
+#else
+    int _sockFD { -1 };
+#endif
     uint16_t _localPort;
 
     PacketFilterOperator _packetFilterOperator;
