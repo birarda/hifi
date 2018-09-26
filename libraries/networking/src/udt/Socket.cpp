@@ -19,25 +19,84 @@
 
 #include <shared/QtHelpers.h>
 #include <LogHandler.h>
+#include <Trace.h>
+#include <ThreadHelpers.h>
 
 #include "../NetworkLogging.h"
+#include "../NLPacket.h"
+#include "../NLPacketList.h"
+
 #include "Connection.h"
 #include "ControlPacket.h"
 #include "Packet.h"
-#include "../NLPacket.h"
-#include "../NLPacketList.h"
 #include "PacketList.h"
-#include <Trace.h>
 
 using namespace udt;
+
+PacketReciever::PacketReciever(QUdpSocket& socket,
+                               tbb::concurrent_queue<Datagram>& incomingDatagrams)
+    : _socket(socket)
+    , _incomingDatagrams(incomingDatagrams)
+{
+}
+
+void PacketReciever::readPendingDatagrams() {
+    qDebug() << Q_FUNC_INFO;
+    int packetsRead = 0;
+    int packetSizeWithHeader = -1;
+    while (_socket.hasPendingDatagrams()
+           && (packetSizeWithHeader = _socket.pendingDatagramSize()) != -1) {
+        qDebug() << Q_FUNC_INFO << "pulling packet";
+        // grab a time point we can mark as the receive time of this packet
+        auto receiveTime = p_high_resolution_clock::now();
+
+
+        // setup a buffer to read the packet into
+        auto buffer = std::unique_ptr<char[]>(new char[packetSizeWithHeader]);
+
+        QHostAddress senderAddress;
+        quint16 senderPort;
+
+        // pull the datagram
+        auto sizeRead = _socket.readDatagram(buffer.get(), packetSizeWithHeader,
+                                             &senderAddress, &senderPort);
+
+        // we either didn't pull anything for this packet or there was an error reading (this seems to trigger
+        // on windows even if there's not a packet available)
+        if (sizeRead < 0) {
+            continue;
+        }
+
+        _incomingDatagrams.push({ senderAddress, senderPort, packetSizeWithHeader,
+            std::move(buffer), receiveTime });
+
+        ++packetsRead;
+        if (packetsRead % 100 == 0) {
+            emit pendingDatagrams(0);
+        }
+
+    }
+
+    if (packetsRead > _maxDatagramsRead) {
+        _maxDatagramsRead = packetsRead;
+        qCDebug(networking) << "readPendingDatagrams: Datagrams read:" << packetsRead;
+    }
+    emit pendingDatagrams(packetsRead);
+}
 
 Socket::Socket(QObject* parent, bool shouldChangeSocketOptions) :
     QObject(parent),
     _readyReadBackupTimer(new QTimer(this)),
-    _shouldChangeSocketOptions(shouldChangeSocketOptions)
+    _shouldChangeSocketOptions(shouldChangeSocketOptions),
+    _packetReciever(_udpSocket, _incomingDatagrams)
 {
-    connect(&_udpSocket, &QUdpSocket::readyRead, this, &Socket::readPendingDatagrams);
-    connect(this, &Socket::pendingDatagrams, this, &Socket::processPendingDatagrams, Qt::QueuedConnection);
+    moveToNewNamedThread(&_packetReciever, "PacketReciever", QThread::TimeCriticalPriority);
+
+    connect(&_udpSocket, &QUdpSocket::readyRead, &_packetReciever, &PacketReciever::readPendingDatagrams);
+    connect(&_udpSocket, &QUdpSocket::readyRead, [] {
+        qDebug() << "Got readyRead()";
+    });
+    connect(&_packetReciever, &PacketReciever::pendingDatagrams, this, &Socket::processPendingDatagrams);
 
     // make sure we hear about errors and state changes from the underlying socket
     connect(&_udpSocket, SIGNAL(error(QAbstractSocket::SocketError)),
@@ -45,9 +104,13 @@ Socket::Socket(QObject* parent, bool shouldChangeSocketOptions) :
     connect(&_udpSocket, &QAbstractSocket::stateChanged, this, &Socket::handleStateChanged);
 
     // in order to help track down the zombie server bug, add a timer to check if we missed a readyRead
-    const int READY_READ_BACKUP_CHECK_MSECS = 2 * 1000;
+    const int READY_READ_BACKUP_CHECK_MSECS = 200 * 1000;
     connect(_readyReadBackupTimer, &QTimer::timeout, this, &Socket::checkForReadyReadBackup);
     _readyReadBackupTimer->start(READY_READ_BACKUP_CHECK_MSECS);
+}
+
+Socket::~Socket() {
+    _packetReciever.thread()->quit();
 }
 
 void Socket::bind(const QHostAddress& address, quint16 port) {
@@ -315,79 +378,34 @@ void Socket::checkForReadyReadBackup() {
     }
 }
 
-void Socket::readPendingDatagrams() {
-    int packetsRead = 0;
-
-    int packetSizeWithHeader = -1;
-    // Max datagrams to read before processing:
-    static const int MAX_DATAGRAMS_CONSECUTIVELY = 10000;
-    while (_udpSocket.hasPendingDatagrams()
-        && (packetSizeWithHeader = _udpSocket.pendingDatagramSize()) != -1
-        && packetsRead <= MAX_DATAGRAMS_CONSECUTIVELY) {
-        // grab a time point we can mark as the receive time of this packet
-        auto receiveTime = p_high_resolution_clock::now();
-
-
-        // setup a buffer to read the packet into
-        auto buffer = std::unique_ptr<char[]>(new char[packetSizeWithHeader]);
-
-        QHostAddress senderAddress;
-        quint16 senderPort;
-
-        // pull the datagram
-        auto sizeRead = _udpSocket.readDatagram(buffer.get(), packetSizeWithHeader,
-            &senderAddress, &senderPort);
-
-        // we either didn't pull anything for this packet or there was an error reading (this seems to trigger
-        // on windows even if there's not a packet available)
-        if (sizeRead < 0) {
-            continue;
-        }
-
-        _incomingDatagrams.push_back({ senderAddress, senderPort, packetSizeWithHeader,
-            std::move(buffer), receiveTime });
-        ++packetsRead;
-
-    }
-
-    if (packetsRead > _maxDatagramsRead) {
-        _maxDatagramsRead = packetsRead;
-        qCDebug(networking) << "readPendingDatagrams: Datagrams read:" << packetsRead;
-    }
-    emit pendingDatagrams(packetsRead);
-}
-
 void Socket::processPendingDatagrams(int) {
-    // setup a HifiSockAddr to read into
-    HifiSockAddr senderSockAddr;
-
-    while (!_incomingDatagrams.empty()) {
-        auto& datagram = _incomingDatagrams.front();
-        senderSockAddr.setAddress(datagram._senderAddress);
-        senderSockAddr.setPort(datagram._senderPort);
-        int datagramSize = datagram._datagramLength;
-        auto receiveTime = datagram._receiveTime;
-
+    qDebug() << Q_FUNC_INFO;
+    Datagram datagram;
+    while (_incomingDatagrams.try_pop(datagram)) {
+        qDebug() << Q_FUNC_INFO << "processing packet";
         // we're reading a packet so re-start the readyRead backup timer
         _readyReadBackupTimer->start();
 
-        // save information for this packet, in case it is the one that sticks readyRead
-        _lastPacketSizeRead = datagramSize;
-        _lastPacketSockAddr = senderSockAddr;
+        int datagramSize = datagram._datagramLength;
+        auto receiveTime = datagram._receiveTime;
+        HifiSockAddr senderSockAddr(datagram._senderAddress,
+                                    datagram._senderPort);
 
-        // Process unfiltered packets first.
         auto it = _unfilteredHandlers.find(senderSockAddr);
         if (it != _unfilteredHandlers.end()) {
             // we have a registered unfiltered handler for this HifiSockAddr (eg. STUN packet) - call that and return
             if (it->second) {
                 auto basePacket = BasePacket::fromReceivedPacket(std::move(datagram._datagram),
-                    datagramSize, senderSockAddr);
+                                                                 datagramSize, senderSockAddr);
                 basePacket->setReceiveTime(receiveTime);
                 it->second(std::move(basePacket));
             }
-            _incomingDatagrams.pop_front();
             continue;
         }
+
+        // save information for this packet, in case it is the one that sticks readyRead
+        _lastPacketSizeRead = datagramSize;
+        _lastPacketSockAddr = senderSockAddr;
 
         // check if this was a control packet or a data packet
         bool isControlPacket = *reinterpret_cast<uint32_t*>(datagram._datagram.get()) & CONTROL_BIT_MASK;
@@ -426,7 +444,6 @@ void Socket::processPendingDatagrams(int) {
                         qCDebug(networking) << "Can't process packet: version" << (unsigned int)NLPacket::versionInHeader(*packet)
                             << ", type" << NLPacket::typeInHeader(*packet);
 #endif
-                        _incomingDatagrams.pop_front();
                         continue;
                     }
                 }
@@ -442,8 +459,6 @@ void Socket::processPendingDatagrams(int) {
                 }
             }
         }
-
-        _incomingDatagrams.pop_front();
     }
 }
 
