@@ -68,13 +68,16 @@ void AvatarMixerSlave::processIncomingPackets(const SharedNodePointer& node) {
     _stats.processIncomingPacketsElapsedTime += (end - start);
 }
 
-int AvatarMixerSlave::sendIdentityPacket(const AvatarMixerClientData* nodeData, const SharedNodePointer& destinationNode) {
+int AvatarMixerSlave::sendIdentityPacket(const AvatarMixerClientData* nodeData, const SharedNodePointer& destinationNode,
+                                         NLPacketListVector& queuedPacketLists) {
     if (destinationNode->getType() == NodeType::Agent && !destinationNode->isUpstream()) {
         QByteArray individualData = nodeData->getConstAvatarData()->identityByteArray();
         individualData.replace(0, NUM_BYTES_RFC4122_UUID, nodeData->getNodeID().toRfc4122()); // FIXME, this looks suspicious
         auto identityPackets = NLPacketList::create(PacketType::AvatarIdentity, QByteArray(), true, true);
         identityPackets->write(individualData);
-        DependencyManager::get<NodeList>()->sendPacketList(std::move(identityPackets), *destinationNode);
+
+        queuedPacketLists.push_back(std::move(identityPackets));
+
         _stats.numIdentityPackets++;
         return individualData.size();
     } else {
@@ -308,6 +311,8 @@ void AvatarMixerSlave::broadcastAvatarDataToAgent(const SharedNodePointer& node)
             AvatarData::_avatarSortCoefficientAge);
     sortedAvatars.reserve(_end - _begin);
 
+    std::unique_ptr<NLPacketListVector> queuedPacketLists { new NLPacketListVector() };
+
     for (auto listedNode = _begin; listedNode != _end; ++listedNode) {
         Node* otherNodeRaw = (*listedNode).data();
         if (otherNodeRaw->getType() != NodeType::Agent
@@ -439,7 +444,7 @@ void AvatarMixerSlave::broadcastAvatarDataToAgent(const SharedNodePointer& node)
             // the time that Avatar B flagged an IDENTITY DATA change, send IDENTITY DATA about Avatar B to Avatar A.
             if (otherAvatar->hasProcessedFirstIdentity()
                 && nodeData->getLastBroadcastTime(otherNode->getLocalID()) <= otherNodeData->getIdentityChangeTimestamp()) {
-                identityBytesSent += sendIdentityPacket(otherNodeData, node);
+                identityBytesSent += sendIdentityPacket(otherNodeData, node, *queuedPacketLists);
 
                 // remember the last time we sent identity details about this other node to the receiver
                 nodeData->setLastBroadcastTime(otherNode->getLocalID(), usecTimestampNow());
@@ -517,8 +522,11 @@ void AvatarMixerSlave::broadcastAvatarDataToAgent(const SharedNodePointer& node)
     traitsPacketList->closeCurrentPacket();
 
     if (traitsPacketList->getNumPackets() >= 1) {
-        // send the traits packet list
-        nodeList->sendPacketList(std::move(traitsPacketList), *destinationNode);
+        queuedPacketLists->push_back(std::move(traitsPacketList));
+    }
+
+    if (queuedPacketLists->size() > 0) {
+        nodeList->sendReliablePacketLists(std::move(queuedPacketLists), *node);
     }
 
     // record the number of avatars held back this frame
