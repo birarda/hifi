@@ -24,6 +24,7 @@
 #include "LossList.h"
 #include "SendQueue.h"
 #include "../HifiSockAddr.h"
+#include "../NLPacketList.h"
 
 namespace udt {
     
@@ -57,6 +58,7 @@ public:
 
     void sendReliablePacket(std::unique_ptr<Packet> packet);
     void sendReliablePacketList(std::unique_ptr<PacketList> packet);
+    void sendReliablePacketLists(std::unique_ptr<NLPacketListVector> packetLists);
 
     void sync(); // rate control method, fired by Socket for all connections on SYN interval
 

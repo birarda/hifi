@@ -40,6 +40,10 @@ private:
     NLPacket::LocalID _sourceID;
 };
 
+
+using NLPacketListVector = std::vector<std::unique_ptr<NLPacketList>>;
+Q_DECLARE_METATYPE(NLPacketListVector*);
+
 Q_DECLARE_METATYPE(QSharedPointer<NLPacketList>)
 
 #endif // hifi_PacketList_h

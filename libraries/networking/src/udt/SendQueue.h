@@ -26,6 +26,7 @@
 #include <PortableHighResolutionClock.h>
 
 #include "../HifiSockAddr.h"
+#include "../NLPacketList.h"
 
 #include "Constants.h"
 #include "PacketQueue.h"
@@ -58,6 +59,7 @@ public:
     
     void queuePacket(std::unique_ptr<Packet> packet);
     void queuePacketList(std::unique_ptr<PacketList> packetList);
+    void queuePacketLists(std::unique_ptr<NLPacketListVector> packetLists);
 
     SequenceNumber getCurrentSequenceNumber() const { return SequenceNumber(_atomicCurrentSequenceNumber); }
     MessageNumber getCurrentMessageNumber() const { return _packets.getCurrentMessageNumber(); }

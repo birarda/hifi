@@ -13,6 +13,7 @@
 
 #include "udt/Packet.h"
 
+int packetListVectorMetaTypeId = qRegisterMetaType<NLPacketListVector*>("NLPacketListVector*");
 
 std::unique_ptr<NLPacketList> NLPacketList::create(PacketType packetType, QByteArray extendedHeader,
                                                    bool isReliable, bool isOrdered) {

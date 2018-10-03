@@ -294,6 +294,18 @@ qint64 Socket::writePacketList(std::unique_ptr<PacketList> packetList, const Hif
     return totalBytesSent;
 }
 
+void Socket::writePacketLists(std::unique_ptr<NLPacketListVector> packetLists, const HifiSockAddr& sockAddr) {
+    if (QThread::currentThread() != thread()) {
+        auto ptr = packetLists.release();
+        QMetaObject::invokeMethod(this, "writeReliablePacketLists", Qt::AutoConnection,
+                                  Q_ARG(NLPacketListVector*, ptr),
+                                  Q_ARG(HifiSockAddr, sockAddr));
+    } else {
+        writeReliablePacketLists(packetLists.release(), sockAddr);
+    }
+
+}
+
 void Socket::writeReliablePacket(Packet* packet, const HifiSockAddr& sockAddr) {
     auto connection = findOrCreateConnection(sockAddr);
     if (connection) {
@@ -304,7 +316,18 @@ void Socket::writeReliablePacket(Packet* packet, const HifiSockAddr& sockAddr) {
         qCDebug(networking) << "Socket::writeReliablePacket refusing to send packet - no connection was created";
     }
 #endif
+}
 
+void Socket::writeReliablePacketLists(NLPacketListVector* packetLists, const HifiSockAddr& sockAddr) {
+    auto connection = findOrCreateConnection(sockAddr);
+    if (connection) {
+        connection->sendReliablePacketLists(std::unique_ptr<NLPacketListVector>(packetLists));
+    }
+#ifdef UDT_CONNECTION_DEBUG
+    else {
+        qCDebug(networking) << "Socket::writeReliablePacketLists refusing to send packet lists - no connection was created";
+    }
+#endif
 }
 
 void Socket::writeReliablePacketList(PacketList* packetList, const HifiSockAddr& sockAddr) {

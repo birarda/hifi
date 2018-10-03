@@ -155,6 +155,8 @@ public:
     qint64 sendPacketList(std::unique_ptr<NLPacketList> packetList, const HifiSockAddr& sockAddr);
     qint64 sendPacketList(std::unique_ptr<NLPacketList> packetList, const Node& destinationNode);
 
+    void sendReliablePacketLists(std::unique_ptr<NLPacketListVector> packetLists, const Node& destinationNode);
+
     std::function<void(Node*)> linkedDataCreateCallback;
 
     size_t size() const { QReadLocker readLock(&_nodeMutex); return _nodeHash.size(); }

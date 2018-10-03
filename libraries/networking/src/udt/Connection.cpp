@@ -153,6 +153,10 @@ void Connection::sendReliablePacketList(std::unique_ptr<PacketList> packetList) 
     getSendQueue().queuePacketList(std::move(packetList));
 }
 
+void Connection::sendReliablePacketLists(std::unique_ptr<NLPacketListVector> packetLists) {
+    getSendQueue().queuePacketLists(std::move(packetLists));
+}
+
 void Connection::queueReceivedMessagePacket(std::unique_ptr<Packet> packet) {
     Q_ASSERT(packet->isPartOfMessage());
 
