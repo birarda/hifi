@@ -425,16 +425,6 @@ void AvatarMixerSlave::broadcastAvatarDataToAgent(const SharedNodePointer& node)
         const AvatarMixerClientData* otherNodeData = reinterpret_cast<const AvatarMixerClientData*>(otherNode->getLinkedData());
         const AvatarData* otherAvatar = otherNodeData->getConstAvatarData();
 
-        // If the time that the mixer sent AVATAR DATA about Avatar B to Avatar A is BEFORE OR EQUAL TO
-        // the time that Avatar B flagged an IDENTITY DATA change, send IDENTITY DATA about Avatar B to Avatar A.
-        if (otherAvatar->hasProcessedFirstIdentity()
-            && nodeData->getLastBroadcastTime(otherNode->getLocalID()) <= otherNodeData->getIdentityChangeTimestamp()) {
-            identityBytesSent += sendIdentityPacket(otherNodeData, node);
-
-            // remember the last time we sent identity details about this other node to the receiver
-            nodeData->setLastBroadcastTime(otherNode->getLocalID(), usecTimestampNow());
-        }
-
         // Typically all out-of-view avatars but such avatars' priorities will rise with time:
         bool isLowerPriority = sortedAvatar.getPriority() <= OUT_OF_VIEW_THRESHOLD;
 
@@ -444,6 +434,17 @@ void AvatarMixerSlave::broadcastAvatarDataToAgent(const SharedNodePointer& node)
         } else if (!overBudget) {
             detail = distribution(generator) < AVATAR_SEND_FULL_UPDATE_RATIO ? AvatarData::SendAllData : AvatarData::CullSmallData;
             nodeData->incrementAvatarInView();
+
+            // If the time that the mixer sent AVATAR DATA about Avatar B to Avatar A is BEFORE OR EQUAL TO
+            // the time that Avatar B flagged an IDENTITY DATA change, send IDENTITY DATA about Avatar B to Avatar A.
+            if (otherAvatar->hasProcessedFirstIdentity()
+                && nodeData->getLastBroadcastTime(otherNode->getLocalID()) <= otherNodeData->getIdentityChangeTimestamp()) {
+                identityBytesSent += sendIdentityPacket(otherNodeData, node);
+
+                // remember the last time we sent identity details about this other node to the receiver
+                nodeData->setLastBroadcastTime(otherNode->getLocalID(), usecTimestampNow());
+            }
+
         }
 
         QVector<JointData>& lastSentJointsForOther = nodeData->getLastOtherAvatarSentJoints(otherNode->getLocalID());
