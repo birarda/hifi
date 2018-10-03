@@ -101,7 +101,8 @@ public:
     void harvestStats(AvatarMixerSlaveStats& stats);
 
 private:
-    int sendIdentityPacket(const AvatarMixerClientData* nodeData, const SharedNodePointer& destinationNode);
+    int sendIdentityPacket(const AvatarMixerClientData* nodeData, const SharedNodePointer& destinationNode,
+                           NLPacketListVector& queuedPacketLists);
     int sendReplicatedIdentityPacket(const Node& agentNode, const AvatarMixerClientData* nodeData, const Node& destinationNode);
 
     qint64 addChangedTraitsToBulkPacket(AvatarMixerClientData* listeningNodeData,
