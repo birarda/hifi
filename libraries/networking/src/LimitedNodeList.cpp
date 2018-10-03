@@ -494,6 +494,27 @@ qint64 LimitedNodeList::sendUnreliableUnorderedPacketList(NLPacketList& packetLi
     return bytesSent;
 }
 
+void LimitedNodeList::sendReliablePacketLists(std::unique_ptr<NLPacketListVector> packetLists, const Node& destinationNode) {
+    auto activeSocket = destinationNode.getActiveSocket();
+    if (activeSocket) {
+        for (auto& packetList : *packetLists) {
+            // close the last packet in the list
+            packetList->closeCurrentPacket();
+
+            for (auto& packet : packetList->_packets) {
+                NLPacket* nlPacket = static_cast<NLPacket*>(packet.get());
+                collectPacketStats(*nlPacket);
+                fillPacketHeader(*nlPacket, destinationNode.getAuthenticateHash());
+            }
+        }
+    } else {
+        qCDebug(networking) << "LimitedNodeList::sendPacketList called without active socket for node "
+            << destinationNode.getUUID() << ". Not sending.";
+    }
+
+    _nodeSocket.writePacketLists(std::move(packetLists), *activeSocket);
+}
+
 qint64 LimitedNodeList::sendPacketList(std::unique_ptr<NLPacketList> packetList, const HifiSockAddr& sockAddr) {
     // close the last packet in the list
     packetList->closeCurrentPacket();
@@ -522,7 +543,7 @@ qint64 LimitedNodeList::sendPacketList(std::unique_ptr<NLPacketList> packetList,
         return _nodeSocket.writePacketList(std::move(packetList), *activeSocket);
     } else {
         qCDebug(networking) << "LimitedNodeList::sendPacketList called without active socket for node "
-                            << destinationNode.getUUID() << ". Not sending.";
+            << destinationNode.getUUID() << ". Not sending.";
         return ERROR_SENDING_PACKET_BYTES;
     }
 }

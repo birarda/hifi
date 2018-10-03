@@ -24,6 +24,7 @@
 #include <QtNetwork/QUdpSocket>
 
 #include "../HifiSockAddr.h"
+#include "../NLPacketList.h"
 #include "TCPVegasCC.h"
 #include "Connection.h"
 
@@ -64,6 +65,7 @@ public:
     qint64 writePacket(const Packet& packet, const HifiSockAddr& sockAddr);
     qint64 writePacket(std::unique_ptr<Packet> packet, const HifiSockAddr& sockAddr);
     qint64 writePacketList(std::unique_ptr<PacketList> packetList, const HifiSockAddr& sockAddr);
+    void writePacketLists(std::unique_ptr<NLPacketListVector> packetLists, const HifiSockAddr& sockAddr);
     qint64 writeDatagram(const char* data, qint64 size, const HifiSockAddr& sockAddr);
     qint64 writeDatagram(const QByteArray& datagram, const HifiSockAddr& sockAddr);
     
@@ -122,8 +124,10 @@ private:
     
     Q_INVOKABLE void writeReliablePacket(Packet* packet, const HifiSockAddr& sockAddr);
     Q_INVOKABLE void writeReliablePacketList(PacketList* packetList, const HifiSockAddr& sockAddr);
-    
+    Q_INVOKABLE void writeReliablePacketLists(NLPacketListVector* packetLists, const HifiSockAddr& sockAddr);
+
     QUdpSocket _udpSocket { this };
+
     PacketFilterOperator _packetFilterOperator;
     PacketHandler _packetHandler;
     MessageHandler _messageHandler;

@@ -124,6 +124,19 @@ void SendQueue::queuePacketList(std::unique_ptr<PacketList> packetList) {
     }
 }
 
+void SendQueue::queuePacketLists(std::unique_ptr<NLPacketListVector> packetLists) {
+    for (auto& packetList : *packetLists) {
+        _packets.queuePacketList(std::move(packetList));
+    }
+
+    // call notify_one on the condition_variable_any in case the send thread is sleeping waiting for packets
+    _emptyCondition.notify_one();
+
+    if (!thread()->isRunning() && _state == State::NotStarted) {
+        thread()->start();
+    }
+}
+
 void SendQueue::stop() {
     
     _state = State::Stopped;
