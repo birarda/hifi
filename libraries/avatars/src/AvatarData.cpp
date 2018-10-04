@@ -1869,15 +1869,15 @@ qint64 AvatarData::packTraitInstance(AvatarTraits::TraitType traitType, AvatarTr
                                    ExtendedIODevice& destination, AvatarTraits::TraitVersion traitVersion) {
     qint64 bytesWritten = 0;
 
-    bytesWritten += destination.writePrimitive(traitType);
-
-    if (traitVersion > AvatarTraits::DEFAULT_TRAIT_VERSION) {
-        bytesWritten += destination.writePrimitive(traitVersion);
-    }
-
-    bytesWritten += destination.write(traitInstanceID.toRfc4122());
-
     if (traitType == AvatarTraits::AvatarEntity) {
+        bytesWritten += destination.writePrimitive(traitType);
+
+        if (traitVersion > AvatarTraits::DEFAULT_TRAIT_VERSION) {
+            bytesWritten += destination.writePrimitive(traitVersion);
+        }
+
+        bytesWritten += destination.write(traitInstanceID.toRfc4122());
+
         // grab a read lock on the avatar entities and check for entity data for the given ID
         QByteArray entityBinaryData;
 
