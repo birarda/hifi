@@ -390,12 +390,12 @@ void LimitedNodeList::fillPacketHeader(const NLPacket& packet, HMACAuth* hmacAut
     if (!PacketTypeEnum::getNonSourcedPackets().contains(packet.getType())) {
         packet.writeSourceID(getSessionLocalID());
     }
-
-    if (_useAuthentication && hmacAuth
-        && !PacketTypeEnum::getNonSourcedPackets().contains(packet.getType())
-        && !PacketTypeEnum::getNonVerifiedPackets().contains(packet.getType())) {
-        packet.writeVerificationHash(*hmacAuth);
-    }
+//
+//    if (_useAuthentication && hmacAuth
+//        && !PacketTypeEnum::getNonSourcedPackets().contains(packet.getType())
+//        && !PacketTypeEnum::getNonVerifiedPackets().contains(packet.getType())) {
+//        packet.writeVerificationHash(*hmacAuth);
+//    }
 }
 
 static const qint64 ERROR_SENDING_PACKET_BYTES = -1;
@@ -499,7 +499,7 @@ void LimitedNodeList::sendReliablePacketLists(std::unique_ptr<NLPacketListVector
     if (activeSocket) {
         for (auto& packetList : *packetLists) {
             // close the last packet in the list
-            packetList->closeCurrentPacket();
+//            packetList->closeCurrentPacket();
 
             for (auto& packet : packetList->_packets) {
                 NLPacket* nlPacket = static_cast<NLPacket*>(packet.get());
@@ -510,6 +510,7 @@ void LimitedNodeList::sendReliablePacketLists(std::unique_ptr<NLPacketListVector
     } else {
         qCDebug(networking) << "LimitedNodeList::sendPacketList called without active socket for node "
             << destinationNode.getUUID() << ". Not sending.";
+        return;
     }
 
     _nodeSocket.writePacketLists(std::move(packetLists), *activeSocket);

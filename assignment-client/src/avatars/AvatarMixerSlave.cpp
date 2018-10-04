@@ -76,6 +76,7 @@ int AvatarMixerSlave::sendIdentityPacket(const AvatarMixerClientData* nodeData, 
         auto identityPackets = NLPacketList::create(PacketType::AvatarIdentity, QByteArray(), true, true);
         identityPackets->write(individualData);
 
+        identityPackets->closeCurrentPacket();
         queuedPacketLists.push_back(std::move(identityPackets));
 
         _stats.numIdentityPackets++;
@@ -501,8 +502,8 @@ void AvatarMixerSlave::broadcastAvatarDataToAgent(const SharedNodePointer& node)
     }
 
     if (nodeData->getNumAvatarsSentLastFrame() > numToSendEst) {
-        qCWarning(avatars) << "More avatars sent than upper estimate" << nodeData->getNumAvatarsSentLastFrame()
-            << " / " << numToSendEst;
+//        qCWarning(avatars) << "More avatars sent than upper estimate" << nodeData->getNumAvatarsSentLastFrame()
+//            << " / " << numToSendEst;
     }
 
     quint64 startPacketSending = usecTimestampNow();
@@ -522,6 +523,7 @@ void AvatarMixerSlave::broadcastAvatarDataToAgent(const SharedNodePointer& node)
     traitsPacketList->closeCurrentPacket();
 
     if (traitsPacketList->getNumPackets() >= 1) {
+        traitsPacketList->closeCurrentPacket();
         queuedPacketLists->push_back(std::move(traitsPacketList));
     }
 
