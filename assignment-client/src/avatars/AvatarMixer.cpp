@@ -824,6 +824,14 @@ void AvatarMixer::sendStatsPacket() {
     auto nodeList = DependencyManager::get<NodeList>();
     // add stats for each listerner
     nodeList->eachNode([&](const SharedNodePointer& node) {
+        auto sock = node->getActiveSocket();
+        QHostAddress bots1 { "10.21.11.64" };
+        QHostAddress bots2 { "10.21.11.145" };
+        if (sock && (sock->getAddress() == bots1 || sock->getAddress() == bots2)) {
+            return;
+        }
+
+
         QJsonObject avatarStats;
 
         const QString NODE_OUTBOUND_KBPS_STAT_KEY = "outbound_kbps";
