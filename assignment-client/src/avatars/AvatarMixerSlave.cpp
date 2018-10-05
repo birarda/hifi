@@ -119,7 +119,15 @@ qint64 AvatarMixerSlave::addChangedTraitsToBulkPacket(AvatarMixerClientData* lis
             auto lastReceivedVersion = *simpleReceivedIt;
             auto& lastSentVersionRef = lastSentVersions[traitType];
 
+
             if (lastReceivedVersions[traitType] > lastSentVersionRef) {
+                if (lastReceivedVersions[traitType] <= 0) {
+                    qWarning() << "Refusing to send a bad simple version"
+                        << lastReceivedVersions[traitType] << "from" << otherNodeLocalID
+                        << "to" << listeningNodeData->getNodeLocalID();
+                    continue;
+                }
+
                 // there is an update to this trait, add it to the traits packet
                 bytesWritten += sendingAvatar->packTrait(traitType, traitsPacketList, lastReceivedVersion);
 
@@ -156,22 +164,35 @@ qint64 AvatarMixerSlave::addChangedTraitsToBulkPacket(AvatarMixerClientData* lis
                                                    });
 
                 if (!isDeleted && (sentInstanceIt == sentIDValuePairs.end() || receivedVersion > sentInstanceIt->value)) {
+                    if (receivedVersion > 0) {
+                        // this instance version exists and has never been sent or is newer so we need to send it
+                        bytesWritten += sendingAvatar->packTraitInstance(traitType, instanceID, traitsPacketList, receivedVersion);
 
-                    // this instance version exists and has never been sent or is newer so we need to send it
-                    bytesWritten += sendingAvatar->packTraitInstance(traitType, instanceID, traitsPacketList, receivedVersion);
-
-                    if (sentInstanceIt != sentIDValuePairs.end()) {
-                        sentInstanceIt->value = receivedVersion;
+                        if (sentInstanceIt != sentIDValuePairs.end()) {
+                            sentInstanceIt->value = receivedVersion;
+                        } else {
+                            sentIDValuePairs.emplace_back(instanceID, receivedVersion);
+                        }
                     } else {
-                        sentIDValuePairs.emplace_back(instanceID, receivedVersion);
+                        qWarning() << "Refusing to send a bad instanced trait version" << receivedVersion
+                            << "from" << otherNodeLocalID
+                            << "to" << listeningNodeData->getNodeLocalID();
+                        continue;
                     }
                 } else if (isDeleted && sentInstanceIt != sentIDValuePairs.end() && absoluteReceivedVersion > sentInstanceIt->value) {
+                    if (absoluteReceivedVersion != 0) {
+                        // this instance version was deleted and we haven't sent the delete to this client yet
+                        bytesWritten += AvatarTraits::packInstancedTraitDelete(traitType, instanceID, traitsPacketList, absoluteReceivedVersion);
 
-                    // this instance version was deleted and we haven't sent the delete to this client yet
-                    bytesWritten += AvatarTraits::packInstancedTraitDelete(traitType, instanceID, traitsPacketList, absoluteReceivedVersion);
+                        // update the last sent version for this trait instance to the absolute value of the deleted version
+                        sentInstanceIt->value = absoluteReceivedVersion;
+                    } else {
+                        qWarning() << "Refusing to send a bad delete version" << absoluteReceivedVersion
+                            << "from" << otherNodeLocalID
+                            << "to" << listeningNodeData->getNodeLocalID();
+                        continue;
+                    }
 
-                    // update the last sent version for this trait instance to the absolute value of the deleted version
-                    sentInstanceIt->value = absoluteReceivedVersion;
                 }
             }
 
