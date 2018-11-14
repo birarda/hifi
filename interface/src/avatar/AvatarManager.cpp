@@ -375,10 +375,15 @@ void AvatarManager::simulateAvatarFades(float deltaTime) {
     QVector<AvatarSharedPointer>::iterator avatarItr = _avatarsToFadeOut.begin();
     const render::ScenePointer& scene = qApp->getMain3DScene();
     render::Transaction transaction;
+
     while (avatarItr != _avatarsToFadeOut.end()) {
         auto avatar = std::static_pointer_cast<Avatar>(*avatarItr);
         avatar->updateFadingStatus();
-        if (!avatar->isFading()) {
+
+        // if the interstitial is currently active then force this avatar's fade to be complete
+        // since it would otherwise be delayed until the interstitial is lifted
+
+        if (!avatar->isFading() || qApp->isInterstitialMode()) {
             // fading to zero is such a rare event we push a unique transaction for each
             if (avatar->isInScene()) {
                 avatar->removeFromScene(*avatarItr, scene, transaction);
