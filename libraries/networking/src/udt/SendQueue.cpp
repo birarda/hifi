@@ -471,6 +471,8 @@ bool SendQueue::isInactive(bool attemptedToSendPacket) {
         
         if (locker.owns_lock() && (_packets.isEmpty() || isFlowWindowFull()) && _naks.isEmpty()) {
             // The packets queue and loss list mutexes are now both locked and they're both empty
+
+            auto lockTime = std::chrono::high_resolution_clock::now();
             
             if (uint32_t(_lastACKSequenceNumber) == uint32_t(_currentSequenceNumber)) {
                 // we've sent the client as much data as we have (and they've ACKed it)
@@ -479,6 +481,10 @@ bool SendQueue::isInactive(bool attemptedToSendPacket) {
                 
                 // use our condition_variable_any to wait
                 auto cvStatus = _emptyCondition.wait_for(locker, EMPTY_QUEUES_INACTIVE_TIMEOUT);
+
+                auto lockDuration = std::chrono::high_resolution_clock::now() - lockTime;
+                qDebug() << "Queue to" << _destination.getAddress().toString() << "was asleep for" << duration_cast<std::chrono::microseconds>(lockDuration).count();
+
                 
                 if (cvStatus == std::cv_status::timeout && (_packets.isEmpty() || isFlowWindowFull()) && _naks.isEmpty()) {
 
@@ -518,6 +524,10 @@ bool SendQueue::isInactive(bool attemptedToSendPacket) {
                 
                 // use our condition_variable_any to wait
                 auto cvStatus = _emptyCondition.wait_for(locker, waitDuration);
+
+                auto lockDuration = std::chrono::high_resolution_clock::now() - lockTime;
+                qDebug() << "Queue to" << _destination.getAddress().toString() << "was asleep for" << duration_cast<std::chrono::microseconds>(lockDuration).count();
+
                 
                 if (cvStatus == std::cv_status::timeout && (_packets.isEmpty() || isFlowWindowFull()) && _naks.isEmpty()
                     && SequenceNumber(_lastACKSequenceNumber) < _currentSequenceNumber) {
